@@ -18,12 +18,15 @@ Configuration:
     Falls back to defaults if the file is not found.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import subprocess
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
+from typing import Optional, List
 
 try:
     import yaml
@@ -111,11 +114,16 @@ class GitState:
 
 @dataclass
 class SessionContext:
-    """Session context from cc-prime-cw."""
+    """Session context from cc-prime-cw and cc-execute."""
     primed: bool
     domains: list[str]
     foundation_docs: list[str]
     manifest_path: str | None
+    state_path: str | None = None
+    tasks_completed: int = 0
+    subagents_spawned: int = 0
+    verifications: list[dict] | None = None
+    files_modified_by_session: list[str] | None = None
 
 
 @dataclass
@@ -455,31 +463,97 @@ def generate_recommendations(
 
 def get_session_context() -> SessionContext | None:
     """
-    Load session context from cc-prime-cw manifest.
+    Load session context from state.json and manifest.
 
-    Enables cc-conclude to reference what was discovered during priming.
+    Enables cc-conclude to reference what was discovered during priming
+    and what was done during execution.
     """
     # Find project root (where .claude/ lives)
     script_dir = Path(__file__).parent.resolve()
     base_dir = script_dir.parent.parent.parent.resolve()
 
+    state_path = base_dir / '.claude' / 'session' / 'state.json'
     manifest_path = base_dir / '.claude' / 'session' / 'manifest.json'
 
-    if not manifest_path.exists():
-        return None
+    context = SessionContext(
+        primed=False,
+        domains=[],
+        foundation_docs=[],
+        manifest_path=None,
+        state_path=None,
+    )
+
+    # Load from state.json (primary source with execution data)
+    if state_path.exists():
+        try:
+            with open(state_path, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+
+            context.primed = state.get('primed_at') is not None
+            context.domains = state.get('domains', [])
+            context.foundation_docs = state.get('foundation_docs', [])
+            context.state_path = str(state_path)
+
+            # Execution data
+            journal = state.get('execution_journal', [])
+            context.tasks_completed = sum(
+                1 for e in journal if e.get('type') == 'task_completed'
+            )
+            context.subagents_spawned = len(state.get('subagents', []))
+            context.verifications = state.get('verification_results', [])
+            context.files_modified_by_session = state.get('files_modified', [])
+
+        except (json.JSONDecodeError, IOError, KeyError):
+            pass
+
+    # Also load manifest path
+    if manifest_path.exists():
+        context.manifest_path = str(manifest_path)
+
+        # Fall back to manifest if state wasn't loaded
+        if not context.primed:
+            try:
+                with open(manifest_path, 'r', encoding='utf-8') as f:
+                    manifest = json.load(f)
+                context.primed = True
+                context.domains = list(manifest.get('domains', {}).keys())
+                context.foundation_docs = [
+                    f['path'] for f in manifest.get('foundation', [])
+                ]
+            except (json.JSONDecodeError, IOError, KeyError):
+                pass
+
+    return context if context.primed else None
+
+
+def conclude_session() -> bool:
+    """
+    Conclude the session and archive to history.
+
+    Called after successful commit to archive session data.
+    """
+    script_dir = Path(__file__).parent.resolve()
+    base_dir = script_dir.parent.parent.parent.resolve()
+
+    # Import session_state from skills directory
+    skills_dir = base_dir / '.claude' / 'skills'
+    sys.path.insert(0, str(skills_dir))
 
     try:
-        with open(manifest_path, 'r', encoding='utf-8') as f:
-            manifest = json.load(f)
+        from session_state import SessionState
 
-        return SessionContext(
-            primed=True,
-            domains=list(manifest.get('domains', {}).keys()),
-            foundation_docs=[f['path'] for f in manifest.get('foundation', [])],
-            manifest_path=str(manifest_path),
-        )
-    except (json.JSONDecodeError, IOError, KeyError):
-        return None
+        state = SessionState(base_dir)
+        return state.conclude()
+
+    except ImportError as e:
+        print(f"Warning: Could not import session_state: {e}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"Warning: Could not conclude session: {e}", file=sys.stderr)
+        return False
+    finally:
+        if str(skills_dir) in sys.path:
+            sys.path.remove(str(skills_dir))
 
 
 def analyze() -> AnalysisResult:
@@ -526,6 +600,11 @@ def main():
         action='store_true',
         help='Show loaded configuration and exit',
     )
+    parser.add_argument(
+        '--conclude',
+        action='store_true',
+        help='Conclude session and archive to history',
+    )
 
     args = parser.parse_args()
 
@@ -536,6 +615,15 @@ def main():
         print(f"YAML available: {HAS_YAML}")
         print(f"\nLoaded triggers:")
         print(json.dumps(README_TRIGGERS, indent=2))
+        return
+
+    if args.conclude:
+        success = conclude_session()
+        if success:
+            print("Session concluded and archived to history.jsonl")
+        else:
+            print("Failed to conclude session", file=sys.stderr)
+            sys.exit(1)
         return
 
     result = analyze()

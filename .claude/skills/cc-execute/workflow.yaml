@@ -132,6 +132,154 @@ project_detection:
     build_commands:
       - "make build"
 
+  # ========== Robotics & Embedded Project Types ==========
+
+  ros2:
+    indicators:
+      - package.xml
+      - colcon.meta
+      - ros2_ws/
+    test_commands:
+      - "colcon test"
+      - "ros2 run <package> <test_node>"
+    lint_commands:
+      - "ament_flake8"
+      - "ament_cpplint"
+      - "ament_uncrustify"
+    build_commands:
+      - "colcon build"
+      - "colcon build --symlink-install"
+
+  arduino:
+    indicators:
+      - "*.ino"
+      - platformio.ini
+      - arduino.json
+    test_commands:
+      - "pio test"
+      - "arduino-cli compile --verify"
+    lint_commands:
+      - "cpplint"
+    build_commands:
+      - "pio run"
+      - "arduino-cli compile"
+
+  platformio:
+    indicators:
+      - platformio.ini
+    test_commands:
+      - "pio test"
+      - "pio test -e native"
+    lint_commands:
+      - "pio check"
+    build_commands:
+      - "pio run"
+      - "pio run -e release"
+
+  embedded_cmake:
+    indicators:
+      - CMakeLists.txt
+      - cmake/
+      - toolchain.cmake
+    test_commands:
+      - "ctest"
+      - "make test"
+    lint_commands:
+      - "clang-tidy"
+      - "cppcheck"
+    build_commands:
+      - "cmake --build build"
+      - "make -j$(nproc)"
+
+  zephyr:
+    indicators:
+      - prj.conf
+      - west.yml
+      - zephyr/
+    test_commands:
+      - "west twister"
+      - "west build -t run"
+    lint_commands:
+      - "west checkpatch"
+    build_commands:
+      - "west build"
+      - "west flash"
+
+  esp_idf:
+    indicators:
+      - sdkconfig
+      - sdkconfig.defaults
+      - components/
+    test_commands:
+      - "idf.py test"
+    lint_commands:
+      - "idf.py check"
+    build_commands:
+      - "idf.py build"
+      - "idf.py flash"
+
+  # ========== Web Application Project Types ==========
+
+  nextjs:
+    indicators:
+      - next.config.js
+      - next.config.mjs
+      - next.config.ts
+    test_commands:
+      - "npm test"
+      - "pnpm test"
+      - "vitest"
+      - "jest"
+    lint_commands:
+      - "npm run lint"
+      - "next lint"
+    build_commands:
+      - "npm run build"
+      - "next build"
+
+  react:
+    indicators:
+      - src/App.tsx
+      - src/App.jsx
+      - vite.config.ts
+      - vite.config.js
+    test_commands:
+      - "npm test"
+      - "vitest"
+      - "jest"
+    lint_commands:
+      - "npm run lint"
+      - "eslint src/"
+    build_commands:
+      - "npm run build"
+      - "vite build"
+
+  fastapi:
+    indicators:
+      - main.py
+      - app/main.py
+    test_commands:
+      - "pytest"
+      - "python -m pytest"
+    lint_commands:
+      - "ruff check"
+      - "mypy"
+    build_commands:
+      - "uvicorn main:app --reload"
+
+  django:
+    indicators:
+      - manage.py
+      - settings.py
+    test_commands:
+      - "python manage.py test"
+      - "pytest"
+    lint_commands:
+      - "ruff check"
+      - "flake8"
+    build_commands:
+      - "python manage.py runserver"
+
 # Token Philosophy
 # Guidelines for subagent token usage.
 token_budget:

@@ -1,0 +1,111 @@
+{
+  "generated_at": "2026-02-05T07:16:40.651133+00:00",
+  "base_directory": "/Users/bryson/Projects/dot-claude-template",
+  "foundation": [],
+  "domains": {
+    "source": {
+      "description": "Main application source code.\nCore business logic, primary modules, and entry points.\nFocus on understanding the main components and how they interact.",
+      "files": [],
+      "keywords": [
+        "class\\s+\\w+",
+        "function\\s+|def\\s+|fn\\s+|func\\s+",
+        "import|from .* import|require|use\\s+",
+        "export|pub\\s+|public\\s+"
+      ],
+      "report_sections": [
+        "main_components",
+        "architecture_patterns",
+        "entry_points",
+        "key_abstractions"
+      ]
+    },
+    "config": {
+      "description": "Configuration files and settings.\nEnvironment setup, build configuration, and project metadata.\nIncludes dependency definitions and tooling configuration.",
+      "files": [],
+      "keywords": [
+        "version|name|description",
+        "dependencies|devDependencies|requires",
+        "scripts|commands|targets",
+        "config|settings|options|env"
+      ],
+      "report_sections": [
+        "project_metadata",
+        "dependencies",
+        "build_config",
+        "environment"
+      ]
+    },
+    "tests": {
+      "description": "Test files and testing infrastructure.\nUnit tests, integration tests, fixtures, and test utilities.\nUnderstanding test patterns helps understand expected behavior.",
+      "files": [],
+      "keywords": [
+        "def test_|fn test_|func Test|it\\(|describe\\(",
+        "fixture|mock|Mock|patch|stub",
+        "assert|expect|should|must",
+        "beforeEach|afterEach|setUp|tearDown|before|after"
+      ],
+      "report_sections": [
+        "test_structure",
+        "fixtures",
+        "coverage_areas",
+        "test_patterns"
+      ]
+    },
+    "docs": {
+      "description": "Documentation files.\nREADME, guides, API documentation, and architectural docs.\nProvides context about intended usage and design decisions.",
+      "files": [],
+      "keywords": [
+        "# |## |### ",
+        "installation|usage|getting started",
+        "api|endpoint|method|function",
+        "architecture|design|overview"
+      ],
+      "report_sections": [
+        "project_overview",
+        "setup_instructions",
+        "architecture_docs",
+        "api_docs"
+      ]
+    },
+    "scripts": {
+      "description": "Build scripts, automation, and tooling.\nCI/CD configuration, deployment scripts, and development tools.",
+      "files": [],
+      "keywords": [
+        "run|build|test|deploy|install",
+        "script|command|task|target",
+        "docker|container|image",
+        "ci|cd|workflow|pipeline"
+      ],
+      "report_sections": [
+        "build_scripts",
+        "ci_cd",
+        "dev_tools",
+        "deployment"
+      ]
+    }
+  },
+  "analyst_config": {
+    "max_files_per_domain": 50,
+    "priority_order": [
+      "source",
+      "config",
+      "tests",
+      "docs",
+      "scripts"
+    ],
+    "report_format": "markdown",
+    "include_line_numbers": true,
+    "foundation_patterns": [
+      "README.md",
+      "README*",
+      "CLAUDE.md",
+      "CLAUDE*",
+      "CONTRIBUTING.md",
+      "ARCHITECTURE.md",
+      "docs/ARCHITECTURE.md",
+      "DESIGN.md",
+      "docs/DESIGN.md"
+    ],
+    "project_config_path": ".claude/project_config.yaml"
+  }
+}

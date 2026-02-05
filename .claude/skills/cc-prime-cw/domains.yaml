@@ -1,43 +1,43 @@
 # Domain Definitions for Context Priming Analysts
-# Each domain defines a specialized area of the codebase for analysis
-# Used by the context-priming skill to generate focused reports
 #
-# CUSTOMIZE THIS FILE for your project:
-# - Add domains relevant to your codebase structure
-# - Update patterns to match your file organization
-# - Adjust keywords for your technology stack
+# This file contains BASE domain definitions that apply to most projects.
+# Project-specific domains are auto-discovered by /cc-learn and stored
+# in .claude/project_config.yaml, which is merged at runtime.
+#
+# To customize for your project:
+# 1. Run /cc-learn to auto-discover patterns
+# 2. Or manually add domains below
+#
+# The discovery script merges:
+#   1. project_config.yaml domains (if exists) - highest priority
+#   2. These base domains - fallback defaults
 
 domains:
+  # ========== Universal Base Domains ==========
+  # These apply to nearly all software projects
+
   - name: source
     description: |
       Main application source code.
       Core business logic, primary modules, and entry points.
       Focus on understanding the main components and how they interact.
     patterns:
-      - "src/**/*.py"
-      - "src/**/*.ts"
-      - "src/**/*.js"
-      - "lib/**/*.py"
-      - "lib/**/*.ts"
-      - "lib/**/*.js"
-      - "app/**/*.py"
-      - "app/**/*.ts"
-      - "app/**/*.js"
-      - "*.py"
-      - "main.py"
-      - "app.py"
-      - "index.ts"
-      - "index.js"
+      # Common source directories - will be supplemented by project_config
+      - "src/**/*"
+      - "lib/**/*"
+      - "app/**/*"
+      - "pkg/**/*"
+      - "internal/**/*"
     keywords:
-      - "class.*"
-      - "def .*|function "
-      - "import|from .* import"
-      - "export|module.exports"
-      - "async def|async function"
+      # Generic patterns that work across languages
+      - "class\\s+\\w+"
+      - "function\\s+|def\\s+|fn\\s+|func\\s+"
+      - "import|from .* import|require|use\\s+"
+      - "export|pub\\s+|public\\s+"
     report_sections:
       - main_components: "Primary classes, modules, and their responsibilities"
-      - architecture_patterns: "Design patterns, code organization, layering"
-      - entry_points: "Main entry points and initialization flow"
+      - architecture_patterns: "Design patterns, code organization"
+      - entry_points: "Main entry points and initialization"
       - key_abstractions: "Core abstractions and interfaces"
 
   - name: config
@@ -55,16 +55,11 @@ domains:
       - ".env*"
       - "config/**/*"
       - "settings/**/*"
-      - "pyproject.toml"
-      - "package.json"
-      - "tsconfig.json"
-      - "Cargo.toml"
-      - "go.mod"
     keywords:
       - "version|name|description"
-      - "dependencies|devDependencies"
-      - "scripts|commands"
-      - "config|settings|options"
+      - "dependencies|devDependencies|requires"
+      - "scripts|commands|targets"
+      - "config|settings|options|env"
     report_sections:
       - project_metadata: "Project name, version, description"
       - dependencies: "Key dependencies and their purposes"
@@ -77,28 +72,18 @@ domains:
       Unit tests, integration tests, fixtures, and test utilities.
       Understanding test patterns helps understand expected behavior.
     patterns:
-      - "tests/**/*.py"
-      - "tests/**/*.ts"
-      - "tests/**/*.js"
-      - "test/**/*.py"
-      - "test/**/*.ts"
-      - "test/**/*.js"
-      - "**/*_test.py"
-      - "**/*_test.ts"
-      - "**/*_test.js"
-      - "**/*.test.py"
-      - "**/*.test.ts"
-      - "**/*.test.js"
-      - "**/*.spec.ts"
-      - "**/*.spec.js"
-      - "**/conftest.py"
-      - "pytest.ini"
-      - "jest.config.*"
+      - "tests/**/*"
+      - "test/**/*"
+      - "spec/**/*"
+      - "**/*_test.*"
+      - "**/*.test.*"
+      - "**/*.spec.*"
+      - "**/test_*.*"
     keywords:
-      - "def test_|it\\(|describe\\("
-      - "fixture|mock|Mock|patch"
-      - "assert|expect|should"
-      - "beforeEach|afterEach|setUp|tearDown"
+      - "def test_|fn test_|func Test|it\\(|describe\\("
+      - "fixture|mock|Mock|patch|stub"
+      - "assert|expect|should|must"
+      - "beforeEach|afterEach|setUp|tearDown|before|after"
     report_sections:
       - test_structure: "How tests are organized"
       - fixtures: "Available fixtures and test utilities"
@@ -115,14 +100,13 @@ domains:
       - "CLAUDE*"
       - "CONTRIBUTING*"
       - "CHANGELOG*"
-      - "docs/**/*.md"
-      - "docs/**/*.rst"
-      - "doc/**/*.md"
+      - "docs/**/*"
+      - "doc/**/*"
       - "*.md"
     keywords:
       - "# |## |### "
       - "installation|usage|getting started"
-      - "api|endpoint|method"
+      - "api|endpoint|method|function"
       - "architecture|design|overview"
     report_sections:
       - project_overview: "What the project does"
@@ -140,17 +124,16 @@ domains:
       - "tools/**/*"
       - "Makefile"
       - "makefile"
-      - ".github/**/*.yml"
-      - ".github/**/*.yaml"
+      - ".github/**/*"
       - ".gitlab-ci.yml"
       - "Dockerfile*"
-      - "docker-compose*.yml"
+      - "docker-compose*"
       - "*.sh"
     keywords:
-      - "run|build|test|deploy"
-      - "script|command|task"
-      - "docker|container"
-      - "ci|cd|workflow"
+      - "run|build|test|deploy|install"
+      - "script|command|task|target"
+      - "docker|container|image"
+      - "ci|cd|workflow|pipeline"
     report_sections:
       - build_scripts: "Build and compilation scripts"
       - ci_cd: "CI/CD pipeline configuration"
@@ -162,7 +145,7 @@ analyst_config:
   # Maximum files to analyze per domain
   max_files_per_domain: 50
 
-  # Priority order for analysis (higher priority = analyzed first, all run in parallel)
+  # Priority order for analysis
   priority_order:
     - source
     - config
@@ -172,12 +155,9 @@ analyst_config:
 
   # Report output format
   report_format: markdown
-
-  # Include line numbers in code references
   include_line_numbers: true
 
   # Foundation documents - high-value docs read directly at session start
-  # These are glob patterns checked in order; discovered files are deduplicated
   foundation_patterns:
     - "README.md"
     - "README*"
@@ -186,9 +166,9 @@ analyst_config:
     - "CONTRIBUTING.md"
     - "ARCHITECTURE.md"
     - "docs/ARCHITECTURE.md"
-    - "docs/architecture.md"
-    - "doc/ARCHITECTURE.md"
     - "DESIGN.md"
     - "docs/DESIGN.md"
-    - "DEVELOPMENT.md"
-    - "docs/DEVELOPMENT.md"
+
+  # Project config file - merged with these base domains
+  # Run /cc-learn to generate this file based on your project
+  project_config_path: ".claude/project_config.yaml"

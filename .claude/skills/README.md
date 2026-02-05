@@ -11,8 +11,63 @@ These skills help Claude Code understand codebases, follow efficient patterns, a
 | `cc-prime-cw/` | `/cc-prime-cw` | Dynamic codebase discovery and session initialization |
 | `cc-execute/` | `/cc-execute` | Subagent workflow patterns for complex tasks |
 | `cc-conclude/` | `/cc-conclude` | Session wrap-up, README updates, and git commit workflow |
+| `cc-learn/` | `/cc-learn` | **Auto-discover** project patterns and evolve configuration |
+
+**Shared Modules**:
+- `session_state.py` - Session state management used by all skills
+- `project_analyzer.py` - Project analysis and configuration discovery
 
 **Note**: In Claude Code, skill directory names become slash commands automatically. The `SKILL.md` file in each directory defines the command behavior.
+
+## Quick Start
+
+```bash
+# 0. (Optional) Auto-configure for your project
+/cc-learn --apply
+
+# 1. Start session - load codebase context
+/cc-prime-cw
+
+# 2. Execute work with subagent orchestration
+/cc-execute Fix the authentication bug
+
+# 3. Wrap up - commit and archive
+/cc-conclude
+```
+
+## Adaptive Configuration
+
+This template **automatically adapts** to your project. Run `/cc-learn` to:
+
+1. **Scan** your codebase for languages, frameworks, and directory patterns
+2. **Generate** domain configurations specific to your project
+3. **Detect** test, lint, and build commands
+4. **Write** project-specific config to `.claude/project_config.yaml`
+
+The system uses a layered configuration:
+```
+.claude/project_config.yaml    <- Auto-generated (highest priority)
+domains.yaml / workflow.yaml   <- Template defaults (fallback)
+```
+
+### When to Run `/cc-learn`
+
+- **First time**: When starting work on a new project
+- **After changes**: When adding new languages, frameworks, or major restructuring
+- **Periodically**: To keep configuration aligned with project evolution
+
+### Example
+
+```bash
+# Analyze project and see suggestions
+/cc-learn
+
+# Auto-apply discovered configuration
+/cc-learn --apply
+
+# Then prime with the new config
+/cc-prime-cw
+```
 
 ## How to Use
 
@@ -22,13 +77,13 @@ Run at the start of a session to load project context:
 
 ```
 /cc-prime-cw              # Basic context priming
-/cc-prime-cw --with-history  # Include last session analysis (if applicable)
 ```
 
 This command:
 1. Discovers files using glob patterns from `domains.yaml`
 2. Spawns analyst subagents to read and synthesize findings
 3. Loads dense project understanding into your context window
+4. Writes session state to `.claude/session/state.json`
 
 ### Task Execution (`/cc-execute`)
 
@@ -44,6 +99,7 @@ This command provides:
 - Structured phase workflow (understand → plan → investigate → execute → verify)
 - Subagent templates for investigation, implementation, verification
 - Adversarial challenge protocol for high-stakes claims
+- Execution logging to session state
 
 ### Session Conclude (`/cc-conclude`)
 
@@ -56,31 +112,124 @@ Run at the end of a session to wrap up work:
 ```
 
 This command provides:
-- Session summary generation from git state and context
+- Session summary generation from execution journal and git state
 - README.md update detection and drafting
 - Git commit workflow with intelligent message generation
-- Optional push with remote status context
+- Session archival to `.claude/session/history.jsonl`
+
+## Session State System
+
+### File Locations
+
+| File | Purpose |
+|------|---------|
+| `.claude/session/state.json` | Current session tracking (primed_at, journal, verifications) |
+| `.claude/session/manifest.json` | Detailed file-level discovery data |
+| `.claude/session/history.jsonl` | Archived sessions (appended on conclude) |
+
+### State Schema (v1.0)
+
+```json
+{
+  "schema_version": "1.0",
+  "primed_at": "2024-01-15T10:30:00Z",
+  "concluded_at": null,
+  "domains": ["source", "config", "tests"],
+  "foundation_docs": ["README.md", "CLAUDE.md"],
+  "execution_journal": [
+    {"ts": "...", "type": "task_created", "subject": "Fix bug", "task_id": "1"},
+    {"ts": "...", "type": "subagent_spawned", "role": "investigator", "model": "sonnet"}
+  ],
+  "subagents": [
+    {"role": "investigator", "type": "Explore", "model": "sonnet", "description": "..."}
+  ],
+  "verification_results": [
+    {"type": "test", "passed": true, "details": "18 tests passed"}
+  ],
+  "files_modified": ["src/auth.py", "tests/test_auth.py"]
+}
+```
+
+### Session State CLI
+
+```bash
+# View current state
+python3 .claude/skills/session_state.py show --pretty
+
+# View execution summary
+python3 .claude/skills/session_state.py summary
+
+# Log events manually (usually done by skills)
+python3 .claude/skills/session_state.py log --type task_created --subject "Fix bug" --task-id "1"
+python3 .claude/skills/session_state.py log --type subagent --role investigator --model sonnet
+python3 .claude/skills/session_state.py log --type verification --passed --details "Tests pass"
+python3 .claude/skills/session_state.py log --type file_modified --file "src/auth.py"
+
+# Conclude and archive session
+python3 .claude/skills/session_state.py conclude
+
+# Reset for fresh session
+python3 .claude/skills/session_state.py reset
+```
 
 ## Session Lifecycle
 
 ```
 /cc-prime-cw     → Load context (session start)
         ↓
-   [saves .claude/session/manifest.json]
+   [writes state.json + manifest.json]
         ↓
 /cc-execute      → Do work (session active)
         ↓              ↑
-   [reads session]  [reads project config]
+   [logs to state.json]  [reads project config]
         ↓
 /cc-conclude     → Wrap up (session end)
         ↓              ↑
-   [reads session]  [reads git state]
+   [reads state.json]  [reads git state]
+        ↓
+   [archives to history.jsonl]
 ```
 
-**Session State Flow**:
-1. `/cc-prime-cw` discovers domains/files and saves manifest to `.claude/session/`
-2. `/cc-execute` reads session context + detects test/build commands from project files
-3. `/cc-conclude` reads session context + git state for intelligent summaries
+## Supported Project Types
+
+### Standard Projects
+
+| Type | Indicators | Test Command |
+|------|------------|--------------|
+| Python | `pyproject.toml`, `setup.py` | `pytest` |
+| Node.js | `package.json` | `npm test` |
+| Rust | `Cargo.toml` | `cargo test` |
+| Go | `go.mod` | `go test ./...` |
+| Make | `Makefile` | `make test` |
+
+### Web Frameworks
+
+| Type | Indicators | Test Command |
+|------|------------|--------------|
+| Next.js | `next.config.js` | `npm test`, `vitest` |
+| React/Vite | `vite.config.ts` | `vitest`, `jest` |
+| FastAPI | `main.py` (with FastAPI imports) | `pytest` |
+| Django | `manage.py`, `settings.py` | `python manage.py test` |
+
+### Robotics & Embedded
+
+| Type | Indicators | Test Command |
+|------|------------|--------------|
+| ROS2 | `package.xml`, `colcon.meta` | `colcon test` |
+| Arduino | `*.ino`, `platformio.ini` | `pio test` |
+| PlatformIO | `platformio.ini` | `pio test` |
+| Zephyr | `prj.conf`, `west.yml` | `west twister` |
+| ESP-IDF | `sdkconfig` | `idf.py test` |
+| CMake (embedded) | `CMakeLists.txt`, `toolchain.cmake` | `ctest` |
+
+### Domain Analysis (for Robotics)
+
+| Domain | Patterns | Focus Areas |
+|--------|----------|-------------|
+| `firmware` | `firmware/**/*.c`, `*.ino` | HAL, drivers, ISRs |
+| `ros2` | `package.xml`, `*_node.py` | Nodes, topics, services |
+| `controls` | `control/**/*`, `**/pid*.py` | PID, Kalman, sensors |
+| `simulation` | `*.urdf`, `*.world` | Gazebo, physics models |
 
 ## Customization
 
@@ -94,7 +243,7 @@ This command provides:
 
 ### Adding Project-Specific Domains
 
-Edit `.claude/skills/cc-prime-cw/domains.yaml` to add domains relevant to your project:
+Edit `.claude/skills/cc-prime-cw/domains.yaml`:
 
 ```yaml
 domains:
@@ -111,7 +260,7 @@ domains:
 
 ### Adding Project-Specific Test Commands
 
-Edit `.claude/skills/cc-execute/workflow.yaml` under `project_detection`:
+Edit `.claude/skills/cc-execute/workflow.yaml`:
 
 ```yaml
 project_detection:
@@ -124,9 +273,53 @@ project_detection:
       - "my-linter"
 ```
 
-### Token Budget Philosophy
+## Token Budget Philosophy
 
 **Subagent context is expendable** - they read thoroughly and synthesize.
 **Main agent context is precious** - receive only dense findings.
 
+| Approach | Tokens Used | Understanding |
+|----------|-------------|---------------|
+| Read 10 files directly | ~100K | Raw code, limited reasoning room |
+| 10 subagents report | ~5K | Synthesized findings, full reasoning room |
+
 This allows understanding 50,000+ lines of code while consuming only ~10K tokens.
+
+## Subagent Roles
+
+| Role | Type | Model | When to Use |
+|------|------|-------|-------------|
+| **Investigator** | Explore | Sonnet | Read files, verify assumptions |
+| **Implementer** | general-purpose | Sonnet | Make code changes |
+| **Verifier** | general-purpose | Sonnet | Run tests, confirm changes |
+| **Adversary** | Explore | Sonnet | Challenge claims, find holes |
+| **Reasoner** | Explore | Opus | Complex analysis, design decisions |
+
+## Troubleshooting
+
+### State Issues
+
+```bash
+# View current state
+python3 .claude/skills/session_state.py show --pretty
+
+# Reset if state is corrupted
+python3 .claude/skills/session_state.py reset
+```
+
+### Discovery Issues
+
+```bash
+# Test discovery manually
+uv run --with pyyaml python3 .claude/skills/cc-prime-cw/discover.py --pretty
+
+# Test project detection
+uv run --with pyyaml python3 .claude/skills/cc-execute/discover.py --pretty
+```
+
+### Git Analysis Issues
+
+```bash
+# Test git analysis
+uv run --with pyyaml python3 .claude/skills/cc-conclude/analyze_changes.py --summary
+```

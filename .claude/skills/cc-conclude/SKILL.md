@@ -44,19 +44,19 @@ git log --oneline -5
 
 ### Phase 2: Summarize
 
-**First, read the execution journal from cc-execute**:
+The analysis output above includes session context from `.claude/session/state.json`:
+- `session.tasks_completed`: Count of completed tasks
+- `session.subagents_spawned`: Count of subagents used
+- `session.verifications`: Test/lint/adversarial results
+- `session.files_modified_by_session`: Files modified during execution
+
+**To view detailed session state**:
 ```bash
-curl -s http://localhost:8000/api/session/journal | jq '.journal'
-curl -s http://localhost:8000/api/session/subagents | jq '.subagents'
-curl -s http://localhost:8000/api/session/state | jq '.state.verification_results'
+python3 .claude/skills/session_state.py show --pretty
+python3 .claude/skills/session_state.py summary
 ```
 
-The execution journal contains:
-- Tasks that were created, started, and completed
-- Subagents that were spawned and their results
-- Verification results (tests, lint, adversarial challenges)
-
-Generate session summary using journal data:
+Generate session summary using this data:
 - **Status**: COMPLETED, IN_PROGRESS, or BLOCKED
 - **Tasks**: From execution_journal task_completed entries
 - **Subagents**: Count and roles from subagents list
@@ -104,13 +104,18 @@ If the git state above shows README triggers detected:
 
 After committing, mark the session as concluded:
 ```bash
-curl -X POST http://localhost:8000/api/session/conclude
+python3 .claude/skills/cc-conclude/analyze_changes.py --conclude
 ```
 
 This:
-- Sets `concluded_at` timestamp
-- Archives the full session state to `~/.claude/session/history.jsonl`
+- Sets `concluded_at` timestamp in `.claude/session/state.json`
+- Archives the full session state to `.claude/session/history.jsonl`
 - Enables the next `/cc-prime-cw` to start fresh
+
+**View session history**:
+```bash
+cat .claude/session/history.jsonl | jq -s '.'
+```
 
 ---
 

@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "primed_at": "2026-02-05T07:16:40.655743+00:00",
+  "concluded_at": null,
+  "domains": [
+    "source",
+    "config",
+    "tests",
+    "docs",
+    "scripts"
+  ],
+  "foundation_docs": [],
+  "execution_journal": [
+    {
+      "ts": "2026-02-05T07:16:40.655792+00:00",
+      "type": "session_primed",
+      "domains": [
+        "source",
+        "config",
+        "tests",
+        "docs",
+        "scripts"
+      ],
+      "foundation_docs": []
+    }
+  ],
+  "subagents": [],
+  "verification_results": [],
+  "files_modified": []
+}

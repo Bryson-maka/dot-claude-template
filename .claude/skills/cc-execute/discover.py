@@ -17,10 +17,13 @@ Configuration:
     Loads detection rules from workflow.yaml in the same directory.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 try:
     import yaml
@@ -139,33 +142,56 @@ def get_available_commands(
 
 def get_session_context(base_dir: Path) -> dict | None:
     """
-    Load session context from cc-prime-cw manifest if available.
+    Load session context from session state and manifest.
 
-    This allows cc-execute to reference domains/files discovered during priming.
+    This allows cc-execute to reference domains/files discovered during priming,
+    as well as the execution journal for continuity.
     """
-    # Check for cached manifest from cc-prime-cw
-    manifest_paths = [
-        base_dir / '.claude' / 'session' / 'manifest.json',
-        base_dir / 'data' / 'manifest.json',
-    ]
+    context = {
+        'primed': False,
+        'domains': [],
+        'foundation_docs': [],
+        'manifest_path': None,
+        'state_path': None,
+        'execution_journal': [],
+        'subagents_spawned': 0,
+        'verifications': [],
+    }
 
-    for manifest_path in manifest_paths:
-        if manifest_path.exists():
+    # Check for session state (primary source)
+    state_path = base_dir / '.claude' / 'session' / 'state.json'
+    if state_path.exists():
+        try:
+            with open(state_path, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            context['primed'] = state.get('primed_at') is not None
+            context['domains'] = state.get('domains', [])
+            context['foundation_docs'] = state.get('foundation_docs', [])
+            context['state_path'] = str(state_path)
+            context['execution_journal'] = state.get('execution_journal', [])
+            context['subagents_spawned'] = len(state.get('subagents', []))
+            context['verifications'] = state.get('verification_results', [])
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    # Also check manifest for detailed file info
+    manifest_path = base_dir / '.claude' / 'session' / 'manifest.json'
+    if manifest_path.exists():
+        context['manifest_path'] = str(manifest_path)
+        # If state wasn't found, fall back to manifest for basic info
+        if not context['primed']:
             try:
                 with open(manifest_path, 'r', encoding='utf-8') as f:
                     manifest = json.load(f)
-                return {
-                    'primed': True,
-                    'domains': list(manifest.get('domains', {}).keys()),
-                    'foundation_docs': [
-                        f['path'] for f in manifest.get('foundation', [])
-                    ],
-                    'manifest_path': str(manifest_path),
-                }
+                context['primed'] = True
+                context['domains'] = list(manifest.get('domains', {}).keys())
+                context['foundation_docs'] = [
+                    f['path'] for f in manifest.get('foundation', [])
+                ]
             except (json.JSONDecodeError, IOError):
                 pass
 
-    return {'primed': False, 'domains': [], 'foundation_docs': []}
+    return context
 
 
 def discover(base_dir: Path) -> dict:

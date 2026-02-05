@@ -90,32 +90,38 @@ Maximum 2 adversarial rounds. If still challenged, ask user.
 
 cc-execute writes to the execution journal so cc-conclude knows what was done.
 
-**After each significant action, log to the journal**:
+**Log significant actions using the session state CLI**:
 ```bash
-# Log task completion
-curl -X POST http://localhost:8000/api/session/journal \
-  -H "Content-Type: application/json" \
-  -d '{"type": "task_completed", "subject": "Fixed config parsing bug", "task_id": "1"}'
+# Log task creation
+python3 .claude/skills/session_state.py log --type task_created --subject "Fix config parsing bug" --task-id "1"
+
+# Log task start
+python3 .claude/skills/session_state.py log --type task_started --task-id "1"
 
 # Log subagent spawn
-curl -X POST http://localhost:8000/api/session/subagents \
-  -H "Content-Type: application/json" \
-  -d '{"role": "investigator", "type": "Explore", "model": "sonnet", "description": "Find config issue"}'
+python3 .claude/skills/session_state.py log --type subagent --role investigator --model sonnet --details "Find config issue"
 
-# Log verification result
-curl -X POST http://localhost:8000/api/session/verification \
-  -H "Content-Type: application/json" \
-  -d '{"type": "test", "passed": true, "details": "18 tests passed"}'
+# Log verification result (test passed)
+python3 .claude/skills/session_state.py log --type verification --verification-type test --passed --details "18 tests passed"
 
-# Log adversarial challenge
-curl -X POST http://localhost:8000/api/session/verification \
-  -H "Content-Type: application/json" \
-  -d '{"type": "adversarial", "passed": true, "details": "ACCEPTED after round 2"}'
+# Log verification result (lint failed)
+python3 .claude/skills/session_state.py log --type verification --verification-type lint --details "3 lint errors"
+
+# Log adversarial challenge result
+python3 .claude/skills/session_state.py log --type verification --verification-type adversarial --passed --details "ACCEPTED after round 2"
+
+# Log file modification
+python3 .claude/skills/session_state.py log --type file_modified --file "src/config.py"
+
+# View execution summary
+python3 .claude/skills/session_state.py summary
 ```
 
-**Journal entry types**: task_created, task_started, task_completed, subagent_spawned, subagent_completed, verification, adversarial
+**Journal entry types**: task_created, task_started, task_completed, subagent_spawned, subagent_completed, verification, file_modified
 
 This enables cc-conclude to generate accurate commit messages and session summaries.
+
+**Note**: Logging is optional but recommended for complex sessions. The session state persists in `.claude/session/state.json`.
 
 ---
 

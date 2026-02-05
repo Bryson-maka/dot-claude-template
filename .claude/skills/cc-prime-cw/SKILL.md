@@ -79,19 +79,11 @@ Ready for work.
 
 ## Session State
 
-After completing priming, update the session state to enable downstream skill integration.
+Session state is automatically updated when priming completes. The discovery script writes to both:
+- `.claude/session/manifest.json` - Detailed file-level manifest
+- `.claude/session/state.json` - Session tracking state
 
-**Location**: `~/.claude/session/state.json` (schema v1.0)
-
-**After Phase 3 (Synthesize), call the session API or update state directly**:
-```bash
-# Mark session as primed with domain info
-curl -X POST http://localhost:8000/api/session/prime \
-  -H "Content-Type: application/json" \
-  -d '{"domains": ["source", "config", "tests", "docs", "scripts"], "foundation_docs": ["README.md"]}'
-```
-
-**Session state fields set by cc-prime-cw**:
+**State fields set by cc-prime-cw**:
 - `primed_at`: ISO timestamp when priming completed
 - `domains`: List of analyzed domain names
 - `foundation_docs`: Foundation documents that were read
@@ -101,7 +93,14 @@ curl -X POST http://localhost:8000/api/session/prime \
 - `/cc-execute` checks `primed_at` to know if context is loaded
 - `/cc-conclude` reads domains and foundation_docs for summary generation
 
-The manifest is also saved to `.claude/session/manifest.json` for detailed file-level access.
+**Manual state management** (if needed):
+```bash
+# Check current state
+python3 .claude/skills/session_state.py show --pretty
+
+# Reset state for fresh session
+python3 .claude/skills/session_state.py reset
+```
 
 ---
 
