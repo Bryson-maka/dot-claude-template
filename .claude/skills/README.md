@@ -35,6 +35,66 @@ These skills help Claude Code understand codebases, follow efficient patterns, a
 /cc-conclude
 ```
 
+## Installing to a New Project
+
+This `.claude/` directory is a **portable template**. To use it in another project:
+
+### Option 1: Copy and Run (Recommended)
+
+```bash
+# Copy .claude directory to your project
+cp -r /path/to/template/.claude /path/to/your-project/
+
+# Navigate to your project
+cd /path/to/your-project
+
+# Run priming - this auto-discovers your project structure
+/cc-prime-cw
+```
+
+That's it. The `/cc-prime-cw` command will:
+- Detect your project's languages and frameworks
+- Scan for relevant files in each domain
+- Generate fresh `state.json` and `manifest.json` for YOUR project
+- Initialize session tracking
+
+### Option 2: Manual Reset First
+
+If you want to explicitly clear any existing session data:
+
+```bash
+# Copy .claude directory
+cp -r /path/to/template/.claude /path/to/your-project/
+cd /path/to/your-project
+
+# Reset session state
+python3 .claude/lib/session_state.py reset
+
+# Then prime
+/cc-prime-cw
+```
+
+### What Gets Regenerated
+
+| Component | Behavior |
+|-----------|----------|
+| `.claude/session/` | **Regenerated** - Contains runtime data specific to each project |
+| `.claude/lib/` | **Portable** - Shared utilities work anywhere |
+| `.claude/skills/` | **Portable** - Skills are project-agnostic |
+| `.claude/project_config.yaml` | **Optional** - Run `/cc-learn --apply` to generate project-specific config |
+
+### Session Directory Contents
+
+The `.claude/session/` directory is gitignored and contains:
+
+| File | Purpose | When Created |
+|------|---------|--------------|
+| `state.json` | Current session state (timestamps, journal, verifications) | `/cc-prime-cw` |
+| `manifest.json` | Discovery manifest (domains, file lists, keywords) | `/cc-prime-cw` |
+| `history.jsonl` | Archived sessions (append-only log) | `/cc-conclude` |
+
+These are **project-specific** and **session-specific** - they should never be committed to git.
+
 ## Adaptive Configuration
 
 This template **automatically adapts** to your project. Run `/cc-learn` to:

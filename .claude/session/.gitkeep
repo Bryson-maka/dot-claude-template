@@ -1,0 +1,12 @@
+# This directory holds runtime session data.
+# Contents are gitignored and regenerated per-project.
+#
+# Files created here:
+#   state.json    - Current session state (primed_at, execution_journal, etc.)
+#   manifest.json - Discovery manifest (domains, files, keywords)
+#   history.jsonl - Archived sessions (appended on /cc-conclude)
+#
+# To reset for a new project:
+#   python3 .claude/lib/session_state.py reset
+#
+# Or simply run /cc-prime-cw which will reinitialize everything.
