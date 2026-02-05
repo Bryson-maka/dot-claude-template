@@ -1,0 +1,73 @@
+# Configuration Learning Settings
+#
+# This file configures the /cc-learn skill behavior.
+# Edit these values to customize how project analysis works.
+
+# Analysis Settings
+analysis:
+  # Directories to ignore during scanning
+  ignore_patterns:
+    - node_modules
+    - __pycache__
+    - .git
+    - .svn
+    - .hg
+    - venv
+    - .venv
+    - env
+    - .env
+    - build
+    - dist
+    - target
+    - out
+    - bin
+    - obj
+    - .idea
+    - .vscode
+    - coverage
+    - .pytest_cache
+    - .mypy_cache
+
+  # Maximum files to analyze (0 = unlimited)
+  max_files: 10000
+
+  # File size limit in bytes (skip larger files)
+  max_file_size: 1000000
+
+# Domain Generation
+domain_generation:
+  # Minimum files in a directory to suggest as domain
+  min_files_for_domain: 3
+
+  # Maximum patterns per domain
+  max_patterns_per_domain: 10
+
+  # Maximum domains to suggest
+  max_domains: 10
+
+# Framework Detection
+framework_detection:
+  # Minimum confidence to include framework (0.0 to 1.0)
+  min_confidence: 0.3
+
+  # Custom framework indicators (extend built-in list)
+  custom_indicators: {}
+  # Example:
+  # my_framework:
+  #   indicators:
+  #     - my_framework.config
+  #   test_commands:
+  #     - my-test-runner
+  #   lint_commands:
+  #     - my-linter
+
+# Output Settings
+output:
+  # Where to write project configuration
+  config_file: ".claude/project_config.yaml"
+
+  # Include metadata in generated config
+  include_metadata: true
+
+  # Include timestamps
+  include_timestamps: true

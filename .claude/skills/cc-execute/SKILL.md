@@ -93,28 +93,28 @@ cc-execute writes to the execution journal so cc-conclude knows what was done.
 **Log significant actions using the session state CLI**:
 ```bash
 # Log task creation
-python3 .claude/skills/session_state.py log --type task_created --subject "Fix config parsing bug" --task-id "1"
+python3 .claude/lib/session_state.py log --type task_created --subject "Fix config parsing bug" --task-id "1"
 
 # Log task start
-python3 .claude/skills/session_state.py log --type task_started --task-id "1"
+python3 .claude/lib/session_state.py log --type task_started --task-id "1"
 
 # Log subagent spawn
-python3 .claude/skills/session_state.py log --type subagent --role investigator --model sonnet --details "Find config issue"
+python3 .claude/lib/session_state.py log --type subagent --role investigator --model sonnet --details "Find config issue"
 
 # Log verification result (test passed)
-python3 .claude/skills/session_state.py log --type verification --verification-type test --passed --details "18 tests passed"
+python3 .claude/lib/session_state.py log --type verification --verification-type test --passed --details "18 tests passed"
 
 # Log verification result (lint failed)
-python3 .claude/skills/session_state.py log --type verification --verification-type lint --details "3 lint errors"
+python3 .claude/lib/session_state.py log --type verification --verification-type lint --details "3 lint errors"
 
 # Log adversarial challenge result
-python3 .claude/skills/session_state.py log --type verification --verification-type adversarial --passed --details "ACCEPTED after round 2"
+python3 .claude/lib/session_state.py log --type verification --verification-type adversarial --passed --details "ACCEPTED after round 2"
 
 # Log file modification
-python3 .claude/skills/session_state.py log --type file_modified --file "src/config.py"
+python3 .claude/lib/session_state.py log --type file_modified --file "src/config.py"
 
 # View execution summary
-python3 .claude/skills/session_state.py summary
+python3 .claude/lib/session_state.py summary
 ```
 
 **Journal entry types**: task_created, task_started, task_completed, subagent_spawned, subagent_completed, verification, file_modified

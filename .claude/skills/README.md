@@ -13,7 +13,7 @@ These skills help Claude Code understand codebases, follow efficient patterns, a
 | `cc-conclude/` | `/cc-conclude` | Session wrap-up, README updates, and git commit workflow |
 | `cc-learn/` | `/cc-learn` | **Auto-discover** project patterns and evolve configuration |
 
-**Shared Modules**:
+**Shared Library** (`.claude/lib/`):
 - `session_state.py` - Session state management used by all skills
 - `project_analyzer.py` - Project analysis and configuration discovery
 
@@ -154,22 +154,56 @@ This command provides:
 
 ```bash
 # View current state
-python3 .claude/skills/session_state.py show --pretty
+python3 .claude/lib/session_state.py show --pretty
 
 # View execution summary
-python3 .claude/skills/session_state.py summary
+python3 .claude/lib/session_state.py summary
 
 # Log events manually (usually done by skills)
-python3 .claude/skills/session_state.py log --type task_created --subject "Fix bug" --task-id "1"
-python3 .claude/skills/session_state.py log --type subagent --role investigator --model sonnet
-python3 .claude/skills/session_state.py log --type verification --passed --details "Tests pass"
-python3 .claude/skills/session_state.py log --type file_modified --file "src/auth.py"
+python3 .claude/lib/session_state.py log --type task_created --subject "Fix bug" --task-id "1"
+python3 .claude/lib/session_state.py log --type subagent --role investigator --model sonnet
+python3 .claude/lib/session_state.py log --type verification --passed --details "Tests pass"
+python3 .claude/lib/session_state.py log --type file_modified --file "src/auth.py"
 
 # Conclude and archive session
-python3 .claude/skills/session_state.py conclude
+python3 .claude/lib/session_state.py conclude
 
 # Reset for fresh session
-python3 .claude/skills/session_state.py reset
+python3 .claude/lib/session_state.py reset
+```
+
+## Directory Structure
+
+```
+.claude/
+├── session/                    # Runtime session data
+│   ├── state.json              # Current session state
+│   ├── manifest.json           # Discovery manifest
+│   └── history.jsonl           # Archived sessions
+├── lib/                        # Shared Python modules
+│   ├── __init__.py
+│   ├── session_state.py        # Session management
+│   └── project_analyzer.py     # Project analysis
+├── skills/                     # Skill commands (/slash-commands)
+│   ├── README.md
+│   ├── cc-prime-cw/            # Context priming
+│   │   ├── SKILL.md
+│   │   ├── discover.py
+│   │   └── domains.yaml
+│   ├── cc-execute/             # Task execution
+│   │   ├── SKILL.md
+│   │   ├── discover.py
+│   │   └── workflow.yaml
+│   ├── cc-conclude/            # Session conclusion
+│   │   ├── SKILL.md
+│   │   ├── analyze_changes.py
+│   │   └── workflow.yaml
+│   └── cc-learn/               # Configuration learning
+│       ├── SKILL.md
+│       ├── learn.py
+│       └── config.yaml
+├── project_config.yaml         # Auto-generated project config
+└── settings.local.json         # User settings
 ```
 
 ## Session Lifecycle
@@ -301,10 +335,10 @@ This allows understanding 50,000+ lines of code while consuming only ~10K tokens
 
 ```bash
 # View current state
-python3 .claude/skills/session_state.py show --pretty
+python3 .claude/lib/session_state.py show --pretty
 
 # Reset if state is corrupted
-python3 .claude/skills/session_state.py reset
+python3 .claude/lib/session_state.py reset
 ```
 
 ### Discovery Issues

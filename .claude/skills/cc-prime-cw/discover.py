@@ -523,9 +523,9 @@ def update_session_state(manifest: dict[str, Any], base_dir: Path) -> bool:
     Returns:
         True if state was updated successfully
     """
-    # Import session_state from skills directory
-    skills_dir = Path(__file__).parent.parent
-    sys.path.insert(0, str(skills_dir))
+    # Import session_state from lib directory
+    lib_dir = Path(__file__).parent.parent.parent / 'lib'
+    sys.path.insert(0, str(lib_dir))
 
     try:
         from session_state import SessionState
@@ -551,8 +551,8 @@ def update_session_state(manifest: dict[str, Any], base_dir: Path) -> bool:
         return False
     finally:
         # Clean up sys.path
-        if str(skills_dir) in sys.path:
-            sys.path.remove(str(skills_dir))
+        if str(lib_dir) in sys.path:
+            sys.path.remove(str(lib_dir))
 
 
 def main():

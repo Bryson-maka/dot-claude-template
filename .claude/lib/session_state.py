@@ -47,23 +47,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+# Import shared utility from lib package
+try:
+    from . import get_project_root
+except ImportError:
+    # Fallback for direct script execution
+    def get_project_root() -> Path:
+        """Find project root by looking for .claude directory."""
+        current = Path.cwd()
+        for parent in [current] + list(current.parents):
+            if (parent / '.claude').is_dir():
+                return parent
+        return current
+
+__all__ = [
+    'SCHEMA_VERSION',
+    'SessionState',
+    'get_state_path',
+    'get_history_path',
+    'timestamp',
+]
 
 # Schema version for forward compatibility
 SCHEMA_VERSION = "1.0"
-
-
-def get_project_root() -> Path:
-    """Find project root by looking for .claude directory."""
-    # Start from current working directory
-    current = Path.cwd()
-
-    # Walk up looking for .claude directory
-    for parent in [current] + list(current.parents):
-        if (parent / '.claude').is_dir():
-            return parent
-
-    # Fallback to cwd
-    return current
 
 
 def get_state_path(base_dir: Optional[Path] = None) -> Path:

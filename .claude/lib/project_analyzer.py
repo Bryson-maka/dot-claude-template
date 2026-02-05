@@ -35,6 +35,14 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Optional, List, Dict, Set
 
+__all__ = [
+    'analyze_project',
+    'ProjectAnalysis',
+    'DomainSuggestion',
+    'FrameworkDetection',
+    'CommandSuggestion',
+]
+
 # File extension to language mapping
 EXTENSION_LANGUAGES = {
     # Systems programming

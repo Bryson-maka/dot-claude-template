@@ -96,10 +96,10 @@ Session state is automatically updated when priming completes. The discovery scr
 **Manual state management** (if needed):
 ```bash
 # Check current state
-python3 .claude/skills/session_state.py show --pretty
+python3 .claude/lib/session_state.py show --pretty
 
 # Reset state for fresh session
-python3 .claude/skills/session_state.py reset
+python3 .claude/lib/session_state.py reset
 ```
 
 ---

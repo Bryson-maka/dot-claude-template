@@ -52,8 +52,8 @@ The analysis output above includes session context from `.claude/session/state.j
 
 **To view detailed session state**:
 ```bash
-python3 .claude/skills/session_state.py show --pretty
-python3 .claude/skills/session_state.py summary
+python3 .claude/lib/session_state.py show --pretty
+python3 .claude/lib/session_state.py summary
 ```
 
 Generate session summary using this data:

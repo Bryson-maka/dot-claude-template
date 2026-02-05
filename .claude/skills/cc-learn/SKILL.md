@@ -3,7 +3,7 @@ name: cc-learn
 description: Analyze project and evolve .claude configuration based on discovered patterns
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, AskUserQuestion
-argument-hint: [--apply | --preview]
+argument-hint: [--apply | --preview | --diff]
 ---
 
 # Configuration Learning
@@ -12,16 +12,16 @@ Analyze your project and intelligently evolve the `.claude` configuration based 
 
 ## Project Analysis
 
-!`python3 .claude/skills/project_analyzer.py --pretty 2>/dev/null | head -80 || echo '{"error": "Analysis failed"}'`
+!`python3 .claude/skills/cc-learn/learn.py 2>/dev/null || echo 'Analysis failed - check .claude/lib/project_analyzer.py'`
 
 ---
 
 ## Arguments
 
-- `--apply`: Automatically apply suggested configuration changes
-- `--preview`: Show what would change without applying (default)
-- `--domains-only`: Only update domain patterns
-- `--commands-only`: Only update test/build commands
+- `--apply`: Apply suggested configuration to `.claude/project_config.yaml`
+- `--preview`: Show full configuration that would be written
+- `--diff`: Show difference between current and suggested configuration
+- (default): Show analysis summary with suggestions
 
 ---
 
@@ -32,8 +32,8 @@ Analyze your project and intelligently evolve the `.claude` configuration based 
 The analysis above shows:
 - **Languages**: Programming languages found in the project
 - **Frameworks**: Detected frameworks, build systems, and tools
-- **Directories**: Purpose-classified directory patterns
-- **Suggestions**: Recommended domain and command configurations
+- **Domains**: Suggested domain configurations based on directory structure
+- **Commands**: Detected test/lint/build commands
 
 ### Phase 2: Review Suggestions
 
@@ -48,22 +48,22 @@ For command suggestions, verify:
 
 ### Phase 3: Apply or Customize
 
-**Option A: Auto-apply** (if `--apply` argument)
+**Option A: Auto-apply** (if `--apply` argument passed or user confirms)
 ```bash
-python3 .claude/skills/project_analyzer.py --apply
+python3 .claude/skills/cc-learn/learn.py --apply
 ```
 This writes to `.claude/project_config.yaml`, which is merged with base configs at runtime.
 
-**Option B: Manual customization**
-1. Review the YAML output from `--suggest-domains`
-2. Add selected domains to `.claude/skills/cc-prime-cw/domains.yaml`
-3. Add commands to `.claude/skills/cc-execute/workflow.yaml`
+**Option B: Preview first**
+```bash
+python3 .claude/skills/cc-learn/learn.py --preview
+```
+Review the full configuration before applying.
 
-**Option C: Ask user** (default)
-Present the analysis summary and ask:
-- Which domains should be added?
-- Which should be skipped?
-- Any custom modifications?
+**Option C: Manual customization**
+1. Run `--preview` to see suggested config
+2. Copy desired sections to `.claude/skills/cc-prime-cw/domains.yaml`
+3. Or manually edit `.claude/project_config.yaml`
 
 ### Phase 4: Validate
 
@@ -91,8 +91,6 @@ domains.yaml / workflow.yaml   <- Template defaults (merged second)
 
 **New domains** in project_config.yaml are added alongside base domains.
 
-This means project-specific patterns get priority while preserving base template intelligence.
-
 ---
 
 ## When to Run
@@ -103,7 +101,7 @@ Run `/cc-learn` when:
 - Significant directory restructuring
 - Test infrastructure changes
 
-The analysis is fast and non-destructive. Changes only apply when you explicitly approve them.
+The analysis is fast and non-destructive. Changes only apply when explicitly confirmed.
 
 ---
 
@@ -112,28 +110,42 @@ The analysis is fast and non-destructive. Changes only apply when you explicitly
 ```
 User: /cc-learn
 
-Analysis shows:
-- Languages: Python (45 files), TypeScript (23 files)
-- Frameworks: pytest, fastapi, react
-- New directories: api/, frontend/, shared/
+## Project Analysis Summary
 
-Suggested domains:
-1. api (source) - FastAPI backend code
-2. frontend (source) - React TypeScript frontend
-3. shared (source) - Shared utilities
+**Files**: 68 (12,450 lines)
+**Languages**: Python (45), TypeScript (23)
+**Frameworks**: pytest (100%), fastapi (80%), react (60%)
 
-Suggested commands:
-- test: pytest, npm test
-- lint: ruff check, npm run lint
-- build: npm run build
+**Suggested Domains**: 3
+  - api: 5 patterns
+  - frontend: 4 patterns
+  - shared: 2 patterns
 
-Apply these changes? [Yes/No/Customize]
+**Suggested Commands**:
+  - test: pytest
+  - lint: ruff check
+  - build: npm run build
 
-User: Yes
+---
+Use `--apply` to write configuration, or `--preview` to see full config.
 
-Configuration applied to .claude/project_config.yaml
-Run /cc-prime-cw to load the updated configuration.
+User: Apply these changes
+
+[Runs: python3 .claude/skills/cc-learn/learn.py --apply]
+
+Configuration written to: .claude/project_config.yaml
+Run /cc-prime-cw to load the new configuration.
 ```
+
+---
+
+## Configuration
+
+Edit `config.yaml` to customize:
+- Analysis ignore patterns
+- Domain generation thresholds
+- Framework detection sensitivity
+- Output settings
 
 ---
 
@@ -142,7 +154,7 @@ Run /cc-prime-cw to load the updated configuration.
 If you want to add a custom domain manually:
 
 ```yaml
-# In domains.yaml or project_config.yaml
+# In project_config.yaml
 domains:
   - name: my_custom_domain
     description: |
@@ -168,7 +180,7 @@ To reset to template defaults:
 rm .claude/project_config.yaml
 ```
 
-To see what would be discovered fresh:
+To re-analyze fresh:
 ```bash
-python3 .claude/skills/project_analyzer.py --pretty
+python3 .claude/skills/cc-learn/learn.py --preview
 ```

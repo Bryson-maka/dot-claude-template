@@ -535,9 +535,9 @@ def conclude_session() -> bool:
     script_dir = Path(__file__).parent.resolve()
     base_dir = script_dir.parent.parent.parent.resolve()
 
-    # Import session_state from skills directory
-    skills_dir = base_dir / '.claude' / 'skills'
-    sys.path.insert(0, str(skills_dir))
+    # Import session_state from lib directory
+    lib_dir = base_dir / '.claude' / 'lib'
+    sys.path.insert(0, str(lib_dir))
 
     try:
         from session_state import SessionState
@@ -552,8 +552,8 @@ def conclude_session() -> bool:
         print(f"Warning: Could not conclude session: {e}", file=sys.stderr)
         return False
     finally:
-        if str(skills_dir) in sys.path:
-            sys.path.remove(str(skills_dir))
+        if str(lib_dir) in sys.path:
+            sys.path.remove(str(lib_dir))
 
 
 def analyze() -> AnalysisResult:
