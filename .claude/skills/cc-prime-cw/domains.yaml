@@ -1,0 +1,194 @@
+# Domain Definitions for Context Priming Analysts
+# Each domain defines a specialized area of the codebase for analysis
+# Used by the context-priming skill to generate focused reports
+#
+# CUSTOMIZE THIS FILE for your project:
+# - Add domains relevant to your codebase structure
+# - Update patterns to match your file organization
+# - Adjust keywords for your technology stack
+
+domains:
+  - name: source
+    description: |
+      Main application source code.
+      Core business logic, primary modules, and entry points.
+      Focus on understanding the main components and how they interact.
+    patterns:
+      - "src/**/*.py"
+      - "src/**/*.ts"
+      - "src/**/*.js"
+      - "lib/**/*.py"
+      - "lib/**/*.ts"
+      - "lib/**/*.js"
+      - "app/**/*.py"
+      - "app/**/*.ts"
+      - "app/**/*.js"
+      - "*.py"
+      - "main.py"
+      - "app.py"
+      - "index.ts"
+      - "index.js"
+    keywords:
+      - "class.*"
+      - "def .*|function "
+      - "import|from .* import"
+      - "export|module.exports"
+      - "async def|async function"
+    report_sections:
+      - main_components: "Primary classes, modules, and their responsibilities"
+      - architecture_patterns: "Design patterns, code organization, layering"
+      - entry_points: "Main entry points and initialization flow"
+      - key_abstractions: "Core abstractions and interfaces"
+
+  - name: config
+    description: |
+      Configuration files and settings.
+      Environment setup, build configuration, and project metadata.
+      Includes dependency definitions and tooling configuration.
+    patterns:
+      - "*.json"
+      - "*.yaml"
+      - "*.yml"
+      - "*.toml"
+      - "*.ini"
+      - "*.cfg"
+      - ".env*"
+      - "config/**/*"
+      - "settings/**/*"
+      - "pyproject.toml"
+      - "package.json"
+      - "tsconfig.json"
+      - "Cargo.toml"
+      - "go.mod"
+    keywords:
+      - "version|name|description"
+      - "dependencies|devDependencies"
+      - "scripts|commands"
+      - "config|settings|options"
+    report_sections:
+      - project_metadata: "Project name, version, description"
+      - dependencies: "Key dependencies and their purposes"
+      - build_config: "Build and compilation settings"
+      - environment: "Environment variables and configuration"
+
+  - name: tests
+    description: |
+      Test files and testing infrastructure.
+      Unit tests, integration tests, fixtures, and test utilities.
+      Understanding test patterns helps understand expected behavior.
+    patterns:
+      - "tests/**/*.py"
+      - "tests/**/*.ts"
+      - "tests/**/*.js"
+      - "test/**/*.py"
+      - "test/**/*.ts"
+      - "test/**/*.js"
+      - "**/*_test.py"
+      - "**/*_test.ts"
+      - "**/*_test.js"
+      - "**/*.test.py"
+      - "**/*.test.ts"
+      - "**/*.test.js"
+      - "**/*.spec.ts"
+      - "**/*.spec.js"
+      - "**/conftest.py"
+      - "pytest.ini"
+      - "jest.config.*"
+    keywords:
+      - "def test_|it\\(|describe\\("
+      - "fixture|mock|Mock|patch"
+      - "assert|expect|should"
+      - "beforeEach|afterEach|setUp|tearDown"
+    report_sections:
+      - test_structure: "How tests are organized"
+      - fixtures: "Available fixtures and test utilities"
+      - coverage_areas: "What functionality is tested"
+      - test_patterns: "Common testing patterns used"
+
+  - name: docs
+    description: |
+      Documentation files.
+      README, guides, API documentation, and architectural docs.
+      Provides context about intended usage and design decisions.
+    patterns:
+      - "README*"
+      - "CLAUDE*"
+      - "CONTRIBUTING*"
+      - "CHANGELOG*"
+      - "docs/**/*.md"
+      - "docs/**/*.rst"
+      - "doc/**/*.md"
+      - "*.md"
+    keywords:
+      - "# |## |### "
+      - "installation|usage|getting started"
+      - "api|endpoint|method"
+      - "architecture|design|overview"
+    report_sections:
+      - project_overview: "What the project does"
+      - setup_instructions: "How to install and configure"
+      - architecture_docs: "Design and architecture documentation"
+      - api_docs: "API documentation if present"
+
+  - name: scripts
+    description: |
+      Build scripts, automation, and tooling.
+      CI/CD configuration, deployment scripts, and development tools.
+    patterns:
+      - "scripts/**/*"
+      - "bin/**/*"
+      - "tools/**/*"
+      - "Makefile"
+      - "makefile"
+      - ".github/**/*.yml"
+      - ".github/**/*.yaml"
+      - ".gitlab-ci.yml"
+      - "Dockerfile*"
+      - "docker-compose*.yml"
+      - "*.sh"
+    keywords:
+      - "run|build|test|deploy"
+      - "script|command|task"
+      - "docker|container"
+      - "ci|cd|workflow"
+    report_sections:
+      - build_scripts: "Build and compilation scripts"
+      - ci_cd: "CI/CD pipeline configuration"
+      - dev_tools: "Development helper scripts"
+      - deployment: "Deployment and container configuration"
+
+# Metadata for the analyst system
+analyst_config:
+  # Maximum files to analyze per domain
+  max_files_per_domain: 50
+
+  # Priority order for analysis (higher priority = analyzed first, all run in parallel)
+  priority_order:
+    - source
+    - config
+    - tests
+    - docs
+    - scripts
+
+  # Report output format
+  report_format: markdown
+
+  # Include line numbers in code references
+  include_line_numbers: true
+
+  # Foundation documents - high-value docs read directly at session start
+  # These are glob patterns checked in order; discovered files are deduplicated
+  foundation_patterns:
+    - "README.md"
+    - "README*"
+    - "CLAUDE.md"
+    - "CLAUDE*"
+    - "CONTRIBUTING.md"
+    - "ARCHITECTURE.md"
+    - "docs/ARCHITECTURE.md"
+    - "docs/architecture.md"
+    - "doc/ARCHITECTURE.md"
+    - "DESIGN.md"
+    - "docs/DESIGN.md"
+    - "DEVELOPMENT.md"
+    - "docs/DEVELOPMENT.md"

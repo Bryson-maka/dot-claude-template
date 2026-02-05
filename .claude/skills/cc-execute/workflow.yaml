@@ -1,0 +1,175 @@
+# Task Execution Workflow Configuration
+#
+# This file defines the configurable aspects of the cc-execute command.
+# Edit these values to customize behavior for your project.
+
+# Subagent Configuration
+# Defines the roles, types, and models for subagents used during execution.
+subagents:
+  investigator:
+    type: Explore
+    model: sonnet
+    description: Read files, verify assumptions, find specific code
+    max_response_tokens: 500
+
+  implementer:
+    type: general-purpose
+    model: sonnet
+    description: Make code changes, refactoring, feature implementation
+    max_response_tokens: 1000
+
+  verifier:
+    type: general-purpose
+    model: sonnet
+    description: Run tests, confirm changes work correctly
+    max_response_tokens: 500
+
+  adversary:
+    type: Explore
+    model: sonnet
+    description: Challenge claims, find holes in implementation
+    max_response_tokens: 750
+
+  reasoner:
+    type: Explore
+    model: opus
+    description: Complex analysis, design decisions, architecture
+    max_response_tokens: 1000
+
+# Adversarial Challenge Configuration
+adversarial:
+  # Maximum rounds of challenge before escalating to user
+  max_rounds: 2
+
+  # Triggers that require adversarial challenge before claiming complete
+  required_for:
+    - "implementation complete"
+    - "bug fixed"
+    - "feature added"
+    - "refactoring done"
+    - "tests passing"
+
+# Verification Configuration
+verification:
+  # Always run verification after these actions
+  verify_after:
+    - code_edit
+    - file_create
+    - dependency_change
+
+  # Skip verification for trivial changes (line count threshold)
+  trivial_change_threshold: 2
+
+# Project Detection
+# Patterns to detect project type and available commands.
+# Used by discover.py to populate test/build/lint commands.
+project_detection:
+  python:
+    indicators:
+      - pyproject.toml
+      - setup.py
+      - requirements.txt
+      - Pipfile
+    test_commands:
+      - "uv run pytest"
+      - "pytest"
+      - "python -m pytest"
+    lint_commands:
+      - "ruff check"
+      - "flake8"
+      - "mypy"
+    build_commands:
+      - "uv build"
+      - "python -m build"
+
+  node:
+    indicators:
+      - package.json
+      - package-lock.json
+      - yarn.lock
+      - pnpm-lock.yaml
+    test_commands:
+      - "npm test"
+      - "yarn test"
+      - "pnpm test"
+    lint_commands:
+      - "npm run lint"
+      - "eslint"
+    build_commands:
+      - "npm run build"
+      - "yarn build"
+
+  rust:
+    indicators:
+      - Cargo.toml
+      - Cargo.lock
+    test_commands:
+      - "cargo test"
+    lint_commands:
+      - "cargo clippy"
+    build_commands:
+      - "cargo build"
+
+  go:
+    indicators:
+      - go.mod
+      - go.sum
+    test_commands:
+      - "go test ./..."
+    lint_commands:
+      - "golangci-lint run"
+    build_commands:
+      - "go build"
+
+  make:
+    indicators:
+      - Makefile
+      - makefile
+    test_commands:
+      - "make test"
+    lint_commands:
+      - "make lint"
+    build_commands:
+      - "make build"
+
+# Token Philosophy
+# Guidelines for subagent token usage.
+token_budget:
+  # Maximum tokens for subagent responses
+  max_subagent_response: 1000
+
+  # Threshold for spawning subagent vs reading directly
+  # Files larger than this should use subagent
+  direct_read_threshold_lines: 250
+
+  # Maximum files to read directly in one investigation
+  max_direct_reads: 5
+
+# Workflow Phases
+phases:
+  - name: understand
+    description: Gather context about the task
+    skippable: false
+
+  - name: plan
+    description: Create specific, verifiable todos
+    skippable: false
+
+  - name: investigate
+    description: Spawn investigators to verify assumptions
+    skippable: true
+    skip_for: trivial_tasks
+
+  - name: execute
+    description: Make changes (direct or via subagent)
+    skippable: false
+
+  - name: verify
+    description: Confirm changes work
+    skippable: true
+    skip_for: trivial_tasks
+
+  - name: challenge
+    description: Adversarial review of claims
+    skippable: true
+    skip_for: trivial_tasks

@@ -1,0 +1,125 @@
+# Session Conclude Workflow Configuration
+#
+# This file defines the configurable aspects of the cc-conclude command.
+# Edit these values to customize behavior for your project.
+
+# README Update Triggers
+# When files matching these patterns are modified, the README check is triggered.
+# Patterns are matched against file paths in git status output.
+readme_triggers:
+  # New or modified directory structures that may need README documentation
+  new_directories:
+    - src/
+    - lib/
+    - app/
+    - tests/
+    - test/
+    - docs/
+    - doc/
+    - scripts/
+    - bin/
+    - dist/
+    - build/
+    - api/
+    - pkg/
+    - internal/
+    - cmd/
+
+  # Configuration files that often require documentation updates
+  config_files:
+    - pyproject.toml
+    - setup.py
+    - setup.cfg
+    - package.json
+    - package-lock.json
+    - Cargo.toml
+    - go.mod
+    - go.sum
+    - Makefile
+    - CMakeLists.txt
+    - Dockerfile
+    - docker-compose.yml
+    - docker-compose.yaml
+    - .env.example
+    - requirements.txt
+    - poetry.lock
+
+  # Claude Code configuration changes
+  claude_content:
+    - .claude/commands/
+    - .claude/skills/
+    - .claude/settings.json
+    - .claude/settings.local.json
+    - CLAUDE.md
+
+  # Documentation files (changes here may require README cross-references)
+  documentation:
+    - CONTRIBUTING.md
+    - CHANGELOG.md
+    - LICENSE
+    - LICENSE.md
+    - docs/
+    - doc/
+    - wiki/
+
+# Conventional Commit Types
+# Used for generating commit messages in the git workflow phase.
+# Format: type(scope): description
+commit_types:
+  - type: feat
+    description: A new feature
+  - type: fix
+    description: A bug fix
+  - type: docs
+    description: Documentation only changes
+  - type: style
+    description: Code style changes (formatting, semicolons, etc.)
+  - type: refactor
+    description: Code change that neither fixes a bug nor adds a feature
+  - type: perf
+    description: Performance improvement
+  - type: test
+    description: Adding or correcting tests
+  - type: build
+    description: Changes to build system or dependencies
+  - type: ci
+    description: CI configuration changes
+  - type: chore
+    description: Other changes that don't modify src or test files
+
+# Workflow Phases
+# Defines the phases executed by cc-conclude and their properties.
+phases:
+  - name: gather
+    description: Collect git state (status, diff, log)
+    skippable: false
+
+  - name: summarize
+    description: Generate session summary from collected state
+    skippable: false
+
+  - name: readme
+    description: Check for README update triggers and draft updates
+    skippable: true
+    skip_flag: --no-readme
+
+  - name: commit
+    description: Stage files, generate message, create commit
+    skippable: false
+    quick_flag: --commit
+
+  - name: push
+    description: Push commits to remote repository
+    skippable: true
+    optional: true
+
+# Git Configuration
+git:
+  # Co-author line added to commits
+  co_author: "Claude <noreply@anthropic.com>"
+
+  # Default branch names to check for base comparison
+  default_branches:
+    - main
+    - master
+    - develop
