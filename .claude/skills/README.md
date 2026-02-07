@@ -17,6 +17,21 @@ These skills help Claude Code understand codebases, follow efficient patterns, a
 - `session_state.py` - Session state management used by all skills
 - `project_analyzer.py` - Project analysis and configuration discovery
 
+**Hooks** (`.claude/hooks/`):
+- `session-init.sh` - SessionStart: initialize environment, detect unconcluded sessions
+- `validate-bash.sh` - PreToolUse: block dangerous commands with structured deny responses
+- `track-file-changes.sh` - PostToolUse: log file modifications to session state
+- `validate-subagent-output.sh` - SubagentStop: ensure subagent responses meet quality threshold
+- `task-completion-gate.sh` - TaskCompleted: log completions, gate on validation (extensible)
+- `session-checkpoint.sh` - Stop: checkpoint session state between responses
+- `pre-compact-save.sh` - PreCompact: preserve state before context window trimming
+- `session-end.sh` - SessionEnd: log session termination for archival
+
+**Rules** (`.claude/rules/`):
+- `hooks.md` - Path-scoped rules for writing hook scripts
+- `skills.md` - Path-scoped rules for authoring SKILL.md files
+- `python.md` - Path-scoped rules for .claude Python scripts
+
 **Note**: In Claude Code, skill directory names become slash commands automatically. The `SKILL.md` file in each directory defines the command behavior.
 
 ## Quick Start
@@ -236,10 +251,25 @@ python3 .claude/lib/session_state.py reset
 
 ```
 .claude/
-├── session/                    # Runtime session data
+├── settings.json               # Shared project settings (hooks, permissions)
+├── settings.local.json         # Personal settings (gitignored)
+├── session/                    # Runtime session data (gitignored)
 │   ├── state.json              # Current session state
 │   ├── manifest.json           # Discovery manifest
 │   └── history.jsonl           # Archived sessions
+├── hooks/                      # Reusable hook scripts
+│   ├── session-init.sh         # SessionStart: env setup, state validation
+│   ├── validate-bash.sh        # PreToolUse: block dangerous commands
+│   ├── track-file-changes.sh   # PostToolUse: log file modifications
+│   ├── validate-subagent-output.sh  # SubagentStop: quality gate
+│   ├── task-completion-gate.sh # TaskCompleted: completion validation
+│   ├── session-checkpoint.sh   # Stop: checkpoint session state
+│   ├── pre-compact-save.sh     # PreCompact: save before context trim
+│   └── session-end.sh          # SessionEnd: log termination
+├── rules/                      # Path-scoped rules (loaded by glob match)
+│   ├── hooks.md                # Rules for .claude/hooks/**/*.sh
+│   ├── skills.md               # Rules for .claude/skills/**/SKILL.md
+│   └── python.md               # Rules for .claude/**/*.py
 ├── lib/                        # Shared Python modules
 │   ├── __init__.py
 │   ├── session_state.py        # Session management
@@ -262,8 +292,7 @@ python3 .claude/lib/session_state.py reset
 │       ├── SKILL.md
 │       ├── learn.py
 │       └── config.yaml
-├── project_config.yaml         # Auto-generated project config
-└── settings.local.json         # User settings
+└── project_config.yaml         # Auto-generated project config
 ```
 
 ## Session Lifecycle
@@ -324,6 +353,148 @@ python3 .claude/lib/session_state.py reset
 | `ros2` | `package.xml`, `*_node.py` | Nodes, topics, services |
 | `controls` | `control/**/*`, `**/pid*.py` | PID, Kalman, sensors |
 | `simulation` | `*.urdf`, `*.world` | Gazebo, physics models |
+
+## Hooks System
+
+Hooks are lifecycle event handlers that run shell commands, LLM prompts, or subagents at specific points during Claude Code operation. This template includes working examples of the three most useful hook patterns.
+
+### Hook Events Reference
+
+| Event | When it Fires | Can Block? | Use Case |
+|-------|---------------|------------|----------|
+| `SessionStart` | Session begins/resumes | No | Set environment variables, initialize state |
+| `UserPromptSubmit` | User submits prompt | Yes | Input validation, prompt rewriting |
+| `PreToolUse` | Before tool executes | Yes (allow/deny/ask) | **Security validation**, command blocking |
+| `PostToolUse` | After tool succeeds | No | **Change tracking**, notifications |
+| `PostToolUseFailure` | After tool fails | No | Error logging, retry logic |
+| `PermissionRequest` | Permission dialog shown | Yes | Auto-approve/deny by policy |
+| `SubagentStart` | Subagent spawns | No | Subagent monitoring |
+| `SubagentStop` | Subagent finishes | Yes | Result validation |
+| `Stop` | Claude finishes responding | Yes | **Session checkpoints**, completion gates |
+| `TaskCompleted` | Task marked complete | Yes | Run tests before accepting completion |
+| `PreCompact` | Before context compaction | No | Save state before context is trimmed |
+| `SessionEnd` | Session terminates | No | Cleanup, final archival |
+
+### Hook Types
+
+```json
+// Shell command (fastest, most common)
+{ "type": "command", "command": "./script.sh", "timeout": 10 }
+
+// Single LLM evaluation (semantic validation)
+{ "type": "prompt", "prompt": "Evaluate if $ARGUMENTS is safe", "timeout": 30 }
+
+// Multi-turn subagent (complex validation)
+{ "type": "agent", "prompt": "Review changes for security issues", "timeout": 60 }
+```
+
+### Hook Configuration Locations
+
+Hooks can be defined in multiple places (all are merged at session start):
+
+| Location | Scope | Committed? |
+|----------|-------|------------|
+| `~/.claude/settings.json` | All projects (user) | N/A |
+| `.claude/settings.json` | This project (shared) | Yes |
+| `.claude/settings.local.json` | This project (personal) | No |
+| Skill YAML frontmatter (`hooks:`) | While skill is active | Yes |
+
+### Included Hook Scripts
+
+**Global hooks** (always active via `settings.json`):
+
+| Script | Event | Purpose |
+|--------|-------|---------|
+| `session-init.sh` | SessionStart | Set env vars via `$CLAUDE_ENV_FILE`, detect unconcluded sessions |
+| `validate-bash.sh` | PreToolUse | Block destructive commands, warn on side-effect commands |
+| `session-checkpoint.sh` | Stop | Checkpoint session state between responses |
+| `validate-subagent-output.sh` | SubagentStop | Ensure subagent responses are substantive (>10 words) |
+| `task-completion-gate.sh` | TaskCompleted | Log completions, extensible validation gate |
+| `pre-compact-save.sh` | PreCompact | Save state before context window is trimmed |
+| `session-end.sh` | SessionEnd | Log session termination reason |
+
+**Skill-scoped hooks** (active only while skill runs):
+
+| Skill | Event | Purpose |
+|-------|-------|---------|
+| cc-prime-cw | SubagentStop(Explore) | Validate analyst subagent outputs |
+| cc-execute | PostToolUse(Edit\|Write) | Track file changes during task execution |
+| cc-conclude | PreToolUse(Bash) | LLM prompt hook: verify git commands are safe for conclude phase |
+| cc-learn | PostToolUse(Write) | Track config file changes |
+
+### Writing Custom Hooks
+
+Hook scripts receive JSON on stdin and communicate via exit codes and stdout:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+INPUT=$(cat)
+# Parse with python3 (portable, jq may not be installed)
+VALUE=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['tool_input']['command'])")
+
+# Decision: exit 0=allow, exit 2=block
+if echo "$VALUE" | grep -q "dangerous"; then
+  echo "Blocked: dangerous command" >&2
+  exit 2
+fi
+
+# Fine-grained PreToolUse decisions:
+# echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"..."}}'
+
+exit 0
+```
+
+### Hooks in Skill Frontmatter
+
+Skills can define scoped hooks that only run while the skill is active. Use this for hooks that are relevant to a specific skill's purpose, not global safety:
+
+```yaml
+---
+name: cc-execute
+hooks:
+  PostToolUse:
+    - matcher: "Edit|Write"
+      hooks:
+        - type: command
+          command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/track-file-changes.sh"
+          timeout: 5
+---
+```
+
+**Scoping principle**: Global safety hooks (bash validation) go in `settings.json`. Skill-specific hooks (file change tracking during execution) go in skill frontmatter. Don't duplicate hooks across both — they would fire twice.
+
+## Path-Scoped Rules
+
+Rules in `.claude/rules/*.md` are automatically loaded when Claude works on files matching their `paths:` frontmatter globs. This provides targeted context without polluting the global instruction set.
+
+```yaml
+---
+paths:
+  - "src/api/**/*.ts"
+---
+# API Rules
+- All endpoints must include input validation
+- Use Zod schemas for request/response types
+```
+
+This template includes rules for hook scripts, skill authoring, and Python code within `.claude/`.
+
+## Permissions
+
+The `.claude/settings.json` file defines tool permissions using allow/deny patterns:
+
+```json
+{
+  "permissions": {
+    "allow": ["Bash(git status*)", "Read", "Glob"],
+    "deny": ["Bash(rm -rf /)*", "Read(.env*)"]
+  }
+}
+```
+
+Patterns support globs. The `allow` list bypasses permission prompts; `deny` blocks entirely.
 
 ## Customization
 

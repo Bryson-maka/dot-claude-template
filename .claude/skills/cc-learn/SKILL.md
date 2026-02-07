@@ -4,6 +4,13 @@ description: Analyze project and evolve .claude configuration based on discovere
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, AskUserQuestion
 argument-hint: [--apply | --preview | --diff]
+hooks:
+  PostToolUse:
+    - matcher: "Write"
+      hooks:
+        - type: command
+          command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/track-file-changes.sh"
+          timeout: 5
 ---
 
 # Configuration Learning

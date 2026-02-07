@@ -3,6 +3,13 @@ name: cc-prime-cw
 description: Load codebase context at session start using analyst subagents
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Task, Bash
+hooks:
+  SubagentStop:
+    - matcher: "Explore"
+      hooks:
+        - type: command
+          command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-subagent-output.sh"
+          timeout: 15
 ---
 
 # Context Window Priming

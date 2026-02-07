@@ -4,9 +4,11 @@ A portable `.claude/` directory template that gives [Claude Code](https://docs.a
 
 ## What This Is
 
-This repository provides a structured skill system for Claude Code. The `.claude/` directory contains:
+This repository provides a structured skill system for Claude Code that demonstrates advanced patterns: skills with YAML frontmatter, lifecycle hooks, path-scoped rules, session state management, and subagent orchestration. The `.claude/` directory contains:
 
 - **Skills** - Slash commands (`/cc-prime-cw`, `/cc-execute`, `/cc-conclude`, `/cc-learn`) that orchestrate multi-agent workflows
+- **Hooks** - Lifecycle event handlers for security validation, change tracking, and session checkpointing
+- **Rules** - Path-scoped instructions that activate based on which files Claude is working on
 - **Session Management** - Persistent state tracking across your coding session
 - **Adaptive Configuration** - Auto-detection of project languages, frameworks, and patterns
 
@@ -36,22 +38,50 @@ cp -r /path/to/dot-claude-template/.claude /path/to/your-project/
 
 The system automatically adapts to your project structure.
 
+## What's Inside
+
+```
+.claude/
+├── settings.json          # Shared hooks + permissions (committed)
+├── settings.local.json    # Personal settings (gitignored)
+├── hooks/                 # Lifecycle hook scripts (8 events covered)
+│   ├── session-init.sh        # SessionStart: env setup + state check
+│   ├── validate-bash.sh       # PreToolUse: block dangerous commands
+│   ├── track-file-changes.sh  # PostToolUse: log file modifications
+│   ├── validate-subagent-output.sh  # SubagentStop: quality gate
+│   ├── task-completion-gate.sh      # TaskCompleted: completion validation
+│   ├── session-checkpoint.sh  # Stop: checkpoint between responses
+│   ├── pre-compact-save.sh    # PreCompact: save before context trim
+│   └── session-end.sh         # SessionEnd: log termination
+├── rules/                 # Path-scoped rules (conditional instructions)
+│   ├── hooks.md               # Activated for .claude/hooks/**/*.sh
+│   ├── skills.md              # Activated for .claude/skills/**/SKILL.md
+│   └── python.md              # Activated for .claude/**/*.py
+├── lib/                   # Shared Python library
+├── skills/                # Slash command skills
+└── session/               # Runtime state (gitignored)
+```
+
 ## Documentation
 
 See **[.claude/skills/README.md](.claude/skills/README.md)** for complete documentation:
 
 - Skill commands and workflows
-- Session lifecycle
+- Hooks system (events, types, configuration, examples)
+- Path-scoped rules and permissions
+- Session lifecycle and state management
 - Configuration customization
 - Supported project types (Python, Node.js, Rust, Go, ROS2, Arduino, and more)
 
 ## Session Workflow
 
 ```
+/cc-learn        (optional) Auto-detect project config
+      |
 /cc-prime-cw     Load codebase context via analyst subagents
       |
 /cc-execute      Execute tasks with structured subagent orchestration
-      |
+      |               hooks: validate commands, track changes
 /cc-conclude     Generate commit messages, update docs, archive session
 ```
 

@@ -4,6 +4,13 @@ description: Wrap up session with summary, README updates, and git commit workfl
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task
 argument-hint: [--commit | --no-readme]
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: prompt
+          prompt: "A git command is about to run: $ARGUMENTS. The user is in a session conclusion workflow (committing, pushing, archiving). Verify this command is safe for a conclude phase - it should be a read-only git command (status, diff, log) OR a standard commit/push. Block any destructive git operations (reset, rebase, force push, branch delete). Respond with {\"ok\": true} or {\"ok\": false, \"reason\": \"explanation\"}."
+          timeout: 15
 ---
 
 # Session Conclusion

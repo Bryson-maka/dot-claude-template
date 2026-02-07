@@ -4,6 +4,13 @@ description: Structured task execution with subagent deployment and todo trackin
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Task, Bash, Edit, Write, NotebookEdit, AskUserQuestion
 argument-hint: [task description]
+hooks:
+  PostToolUse:
+    - matcher: "Edit|Write"
+      hooks:
+        - type: command
+          command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/track-file-changes.sh"
+          timeout: 5
 ---
 
 # Task Execution
