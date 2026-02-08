@@ -1,0 +1,32 @@
+# Security Policy: Project-specific overrides for hook tiers
+#
+# This file lets you customize the security behavior without modifying
+# the hook scripts themselves. Hooks read this file at runtime.
+#
+# The hook system has four tiers:
+#   BLOCKED - always denied, never prompts (catastrophic ops, secrets)
+#   ASK     - prompts user for confirmation (destructive but legitimate)
+#   WARN    - allowed with context warning (side-effect commands)
+#   ALLOW   - silent pass-through (everything else)
+
+# Paths where `rm` is downgraded from ASK → WARN (allowed without prompting).
+# These are build artifacts / generated dirs that are safe to delete routinely.
+# Add your project's generated directories here.
+safe_delete_paths:
+  - node_modules
+  - dist
+  - build
+  - .next
+  - __pycache__
+  - .pytest_cache
+  - .mypy_cache
+  - target       # Rust/Java build output
+  - .turbo
+  - coverage
+
+# Additional secret files to hard-deny reads on (beyond built-in .env, .pem, etc.)
+# Use regex patterns matched against the filename (not full path).
+secret_files: []
+  # - "firebase-admin.*\\.json"
+  # - "gcp-credentials\\.json"
+  # - "\\.secrets$"

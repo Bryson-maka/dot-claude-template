@@ -18,8 +18,7 @@
     "deny": [
       "Bash(rm -rf /)*",
       "Bash(git push --force*)",
-      "Bash(git reset --hard*)",
-      "Read(.env*)"
+      "Bash(git reset --hard*)"
     ]
   },
   "hooks": {
@@ -42,6 +41,28 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-bash.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-read.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/track-file-changes.sh",
             "timeout": 10
           }
         ]

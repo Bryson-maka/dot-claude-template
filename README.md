@@ -43,9 +43,11 @@ The system automatically adapts to your project structure.
 .claude/
 ├── settings.json          # Shared hooks + permissions (committed)
 ├── settings.local.json    # Personal settings (gitignored)
+├── security-policy.yaml   # Project-specific security tier overrides
 ├── hooks/                 # Lifecycle hook scripts
 │   ├── session-init.sh        # SessionStart: env setup + state check
-│   ├── validate-bash.sh       # PreToolUse: block dangerous commands
+│   ├── validate-bash.sh       # PreToolUse/Bash: 4-tier command validation
+│   ├── validate-read.sh       # PreToolUse/Read: secret file protection
 │   ├── track-file-changes.sh  # PostToolUse: log file modifications
 │   ├── validate-subagent-output.sh  # SubagentStop: quality gate
 │   ├── pre-compact-save.sh    # PreCompact: save before context trim
