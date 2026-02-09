@@ -61,8 +61,13 @@ if decision == 'ask':
 elif decision == 'allow' and reason:
     hso['additionalContext'] = reason
 print(json.dumps({'hookSpecificOutput': hso}))
-" "$decision" "$reason"
-  exit 0
+" "$decision" "$reason" && exit 0
+  # python3 failed — fail-closed for deny/ask, fail-open for allow
+  if [ "$decision" = "allow" ]; then
+    exit 0
+  fi
+  echo "Blocked: $reason (hook JSON emit failed)" >&2
+  exit 2
 }
 
 # Extract command prefix (first line, max 200 chars) to avoid false positives

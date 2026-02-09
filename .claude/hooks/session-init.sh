@@ -19,8 +19,8 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 SESSION_DIR="$PROJECT_DIR/.claude/session"
 STATE_FILE="$SESSION_DIR/state.json"
 
-# Ensure session directory exists
-mkdir -p "$SESSION_DIR"
+# Ensure session directory exists (guard against permission/disk errors)
+mkdir -p "$SESSION_DIR" 2>/dev/null || true
 
 # Set environment variables for the entire session via CLAUDE_ENV_FILE
 # This is the ONLY hook event where CLAUDE_ENV_FILE is available

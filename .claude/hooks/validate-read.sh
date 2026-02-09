@@ -39,8 +39,10 @@ print(json.dumps({
         'permissionDecisionReason': sys.argv[1]
     }
 }))
-" "$reason"
-  exit 0
+" "$reason" && exit 0
+  # python3 failed — fall back to exit 2 (block) so secrets stay protected
+  echo "Blocked: $reason (hook JSON emit failed)" >&2
+  exit 2
 }
 
 # ============================================================================
