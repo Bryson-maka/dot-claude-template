@@ -14,7 +14,7 @@ argument-hint: [task description]
 
 ## Project Context
 
-!`uv run --with pyyaml python3 .claude/skills/cc-execute/discover.py --pretty 2>/dev/null || echo '{"error": "Discovery failed - check manually"}'`
+!`_err=$(mktemp) && uv run --with pyyaml python3 .claude/skills/cc-execute/discover.py --pretty 2>"$_err" || { python3 -c "import json,sys; print(json.dumps({'error':'Discovery failed','stderr':open(sys.argv[1]).read()}))" "$_err"; rm -f "$_err"; false; } && rm -f "$_err"`
 
 ---
 

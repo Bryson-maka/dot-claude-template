@@ -62,6 +62,32 @@ LARGE_THRESHOLD = 500   # Lines above this are considered LARGE
 CHUNK_SIZE = 1500       # Lines per chunk
 CHUNK_OVERLAP = 100     # Overlap between chunks
 
+# Directories always excluded from discovery (virtual envs, caches, build outputs)
+GLOBAL_IGNORE_DIRS = {
+    'node_modules', '__pycache__', '.git', '.svn', '.hg',
+    'venv', '.venv', 'env', '.env',
+    'build', 'dist', 'target', 'out', 'bin', 'obj',
+    '.idea', '.vscode', '.vs',
+    'coverage', '.coverage', 'htmlcov',
+    '.pytest_cache', '.mypy_cache', '.ruff_cache',
+    '.next', '.nuxt', '.output',
+    'vendor', 'third_party', 'external',
+    '.tox', '.nox', '.eggs',
+}
+
+# File extensions that are binary / non-source and should never appear in manifests
+BINARY_EXTENSIONS = {
+    '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe',
+    '.o', '.obj', '.a', '.lib',
+    '.class', '.jar', '.war',
+    '.wasm',
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg',
+    '.woff', '.woff2', '.ttf', '.eot',
+    '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
+    '.db', '.sqlite', '.sqlite3',
+    '.bin', '.dat',
+}
+
 
 def get_line_count(file_path: Path) -> int:
     """Count lines in a file, handling encoding errors gracefully."""
@@ -108,20 +134,45 @@ def calculate_chunks(line_count: int) -> list[list[int]] | None:
     return chunks
 
 
+def _is_ignored_path(file_path: Path, base_dir: Path) -> bool:
+    """Check if a file path should be excluded from discovery."""
+    try:
+        rel = file_path.resolve().relative_to(base_dir.resolve())
+    except ValueError:
+        rel = file_path
+
+    # Check if any path component is in the ignore set or matches suffix patterns
+    for part in rel.parts:
+        if part in GLOBAL_IGNORE_DIRS:
+            return True
+        if part.endswith('.egg-info'):
+            return True
+
+    # Check for binary extensions
+    if file_path.suffix.lower() in BINARY_EXTENSIONS:
+        return True
+
+    return False
+
+
 def discover_files(pattern: str, base_dir: Path) -> list[Path]:
     """
     Discover files matching a glob pattern.
 
     Handles missing directories gracefully by returning empty list.
+    Filters out ignored directories and binary files.
     """
     try:
         # Convert pattern to be relative to base_dir
         if pattern.startswith('/'):
             # Absolute pattern - use as-is
-            return sorted(Path('/').glob(pattern.lstrip('/')))
+            raw = sorted(Path('/').glob(pattern.lstrip('/')))
         else:
             # Relative pattern - resolve from base_dir
-            return sorted(base_dir.glob(pattern))
+            raw = sorted(base_dir.glob(pattern))
+
+        # Filter out ignored paths
+        return [p for p in raw if not _is_ignored_path(p, base_dir)]
     except (OSError, ValueError):
         return []
 
@@ -311,12 +362,19 @@ def merge_domains(
             for list_field in ['patterns', 'keywords', 'report_sections']:
                 base_list = base_config.get(list_field, [])
                 project_list = project_config.get(list_field, [])
+
+                # For report_sections, normalize to strings before merging
+                # so that {"key": "desc"} and "key" are treated as the same
+                if list_field == 'report_sections':
+                    base_list = normalize_report_sections(base_list)
+                    project_list = normalize_report_sections(project_list)
+
                 # Deduplicate while preserving order (project first)
-                seen = set()
+                # Use list-based membership check since items may be
+                # unhashable (e.g. dicts in other fields)
                 merged_list = []
                 for item in project_list + base_list:
-                    if item not in seen:
-                        seen.add(item)
+                    if item not in merged_list:
                         merged_list.append(item)
                 merged_config[list_field] = merged_list
 

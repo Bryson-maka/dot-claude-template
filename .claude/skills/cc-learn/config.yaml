@@ -24,9 +24,22 @@ analysis:
     - obj
     - .idea
     - .vscode
+    - .vs
     - coverage
+    - .coverage
+    - htmlcov
     - .pytest_cache
     - .mypy_cache
+    - .ruff_cache
+    - .next
+    - .nuxt
+    - .output
+    - vendor
+    - third_party
+    - external
+    - .tox
+    - .nox
+    - .eggs
 
   # Maximum files to analyze (0 = unlimited)
   max_files: 10000

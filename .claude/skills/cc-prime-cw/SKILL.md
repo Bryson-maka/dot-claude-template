@@ -18,7 +18,7 @@ Prime your context window by deploying analyst subagents to explore the codebase
 
 ## Codebase Manifest
 
-!`uv run --with pyyaml python3 .claude/skills/cc-prime-cw/discover.py --pretty 2>/dev/null || echo '{"error": "Discovery failed - run manually: uv run --with pyyaml python3 .claude/skills/cc-prime-cw/discover.py --pretty"}'`
+!`_err=$(mktemp) && uv run --with pyyaml python3 .claude/skills/cc-prime-cw/discover.py --pretty 2>"$_err" || { python3 -c "import json,sys; print(json.dumps({'error':'Discovery failed','stderr':open(sys.argv[1]).read()}))" "$_err"; rm -f "$_err"; false; } && rm -f "$_err"`
 
 ---
 

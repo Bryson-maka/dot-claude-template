@@ -35,10 +35,10 @@ domains:
       - "import|from .* import|require|use\\s+"
       - "export|pub\\s+|public\\s+"
     report_sections:
-      - main_components: "Primary classes, modules, and their responsibilities"
-      - architecture_patterns: "Design patterns, code organization"
-      - entry_points: "Main entry points and initialization"
-      - key_abstractions: "Core abstractions and interfaces"
+      - main_components
+      - architecture_patterns
+      - entry_points
+      - key_abstractions
 
   - name: config
     description: |
@@ -46,9 +46,12 @@ domains:
       Environment setup, build configuration, and project metadata.
       Includes dependency definitions and tooling configuration.
     patterns:
-      - "*.json"
-      - "*.yaml"
-      - "*.yml"
+      # Root-level config files only (not recursive globs that match data dirs)
+      - "package.json"
+      - "tsconfig.json"
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "go.mod"
       - "*.toml"
       - "*.ini"
       - "*.cfg"
@@ -61,10 +64,10 @@ domains:
       - "scripts|commands|targets"
       - "config|settings|options|env"
     report_sections:
-      - project_metadata: "Project name, version, description"
-      - dependencies: "Key dependencies and their purposes"
-      - build_config: "Build and compilation settings"
-      - environment: "Environment variables and configuration"
+      - project_metadata
+      - dependencies
+      - build_config
+      - environment
 
   - name: tests
     description: |
@@ -85,10 +88,10 @@ domains:
       - "assert|expect|should|must"
       - "beforeEach|afterEach|setUp|tearDown|before|after"
     report_sections:
-      - test_structure: "How tests are organized"
-      - fixtures: "Available fixtures and test utilities"
-      - coverage_areas: "What functionality is tested"
-      - test_patterns: "Common testing patterns used"
+      - test_structure
+      - fixtures
+      - coverage_areas
+      - test_patterns
 
   - name: docs
     description: |
@@ -109,10 +112,10 @@ domains:
       - "api|endpoint|method|function"
       - "architecture|design|overview"
     report_sections:
-      - project_overview: "What the project does"
-      - setup_instructions: "How to install and configure"
-      - architecture_docs: "Design and architecture documentation"
-      - api_docs: "API documentation if present"
+      - project_overview
+      - setup_instructions
+      - architecture_docs
+      - api_docs
 
   - name: scripts
     description: |
@@ -135,10 +138,10 @@ domains:
       - "docker|container|image"
       - "ci|cd|workflow|pipeline"
     report_sections:
-      - build_scripts: "Build and compilation scripts"
-      - ci_cd: "CI/CD pipeline configuration"
-      - dev_tools: "Development helper scripts"
-      - deployment: "Deployment and container configuration"
+      - build_scripts
+      - ci_cd
+      - dev_tools
+      - deployment
 
 # Metadata for the analyst system
 analyst_config:

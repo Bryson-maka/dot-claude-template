@@ -152,6 +152,30 @@ IGNORE_PATTERNS = {
     '.pytest_cache', '.mypy_cache', '.ruff_cache',
     '.next', '.nuxt', '.output',
     'vendor', 'third_party', 'external',
+    '.tox', '.nox', '.eggs',
+}
+
+# Directory names that indicate non-source content (data, logs, artifacts)
+# These are excluded from being classified as 'source' purpose
+DATA_DIR_PATTERNS = {
+    'artifact', 'artifacts', 'data', 'dataset', 'datasets',
+    'log', 'logs', 'output', 'outputs', 'results',
+    'cache', 'tmp', 'temp', 'backup', 'backups',
+    'dump', 'dumps', 'archive', 'archives',
+    'fixture', 'fixtures', 'mock', 'mocks',
+    'snapshot', 'snapshots', 'recording', 'recordings',
+    'migration', 'migrations',
+}
+
+# Languages that represent actual source code (not data/config/markup)
+SOURCE_CODE_LANGUAGES = {
+    'python', 'javascript', 'typescript', 'rust', 'go', 'c', 'cpp',
+    'java', 'kotlin', 'scala', 'clojure', 'groovy',
+    'csharp', 'fsharp', 'vb',
+    'ruby', 'php', 'lua', 'perl',
+    'swift', 'objc', 'dart',
+    'shell', 'powershell',
+    'zig', 'arduino', 'verilog', 'systemverilog', 'vhdl',
 }
 
 
@@ -212,8 +236,12 @@ class ProjectAnalysis:
 
 def should_ignore(path: Path) -> bool:
     """Check if path should be ignored."""
-    parts = set(path.parts)
-    return bool(parts & IGNORE_PATTERNS)
+    for part in path.parts:
+        if part in IGNORE_PATTERNS:
+            return True
+        if part.endswith('.egg-info'):
+            return True
+    return False
 
 
 def get_language(extension: str) -> str:
@@ -244,6 +272,17 @@ def scan_files(base_dir: Path) -> List[FileStats]:
 
         for filename in filenames:
             if filename.startswith('.'):
+                continue
+
+            # Skip binary/compiled files
+            if filename.endswith((
+                '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe',
+                '.o', '.obj', '.a', '.lib', '.class', '.jar', '.war', '.wasm',
+                '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg',
+                '.woff', '.woff2', '.ttf', '.eot',
+                '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
+                '.db', '.sqlite', '.sqlite3', '.bin', '.dat',
+            )):
                 continue
 
             file_path = root_path / filename
@@ -309,7 +348,11 @@ def analyze_directories(files: List[FileStats], base_dir: Path) -> List[Director
             purpose = 'examples'
         elif any(x in dir_name for x in ['asset', 'static', 'public', 'resource']):
             purpose = 'assets'
-        elif languages:
+        elif dir_name in DATA_DIR_PATTERNS:
+            purpose = 'unknown'  # Explicitly skip data/artifact dirs
+        elif languages and any(lang in SOURCE_CODE_LANGUAGES for lang in languages):
+            # Only classify as source if the dir contains actual code languages,
+            # not just json/yaml/markdown data files
             purpose = 'source'
 
         # Generate glob patterns
@@ -420,12 +463,21 @@ def generate_domain_suggestions(
         if purpose == 'unknown':
             continue
 
-        # Collect all patterns and languages
+        # Collect all patterns and languages, prioritizing dirs with source
+        # code languages over dirs with only data formats
         all_patterns = []
         all_languages = set()
-        for d in dirs:
+
+        # Sort dirs: those with source-code languages first, then by file count
+        def _dir_priority(d: DirectoryPattern) -> tuple:
+            has_code = any(lang in SOURCE_CODE_LANGUAGES for lang in d.languages)
+            return (0 if has_code else 1, -d.file_count)
+
+        sorted_dirs = sorted(dirs, key=_dir_priority)
+
+        for d in sorted_dirs:
             all_patterns.extend(d.patterns)
-            all_languages.update(d.language for d in dirs for d.language in d.languages)
+            all_languages.update(lang for lang in d.languages)
 
         # Generate keywords based on languages
         keywords = generate_keywords_for_languages(list(all_languages))
