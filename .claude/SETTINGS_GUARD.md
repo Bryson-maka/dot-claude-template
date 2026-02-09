@@ -15,6 +15,8 @@
    - `PreToolUse/Bash` → `validate-bash.sh`: 4-tier security model
    - `PreToolUse/Read` → `validate-read.sh`: Secret file protection
    - `PostToolUse/Edit|Write` → `track-file-changes.sh`: Change tracking
+   - `PostToolUse/Bash` → `notify-bash-success.sh`: Silent command acknowledgment
+   - `PostToolUseFailure/Bash` → `notify-bash-failure.sh`: Denial/failure feedback to agent
    - `SessionStart` → `session-init.sh`: Environment setup
    - `PreCompact` → `pre-compact-save.sh`: State preservation
    - `SessionEnd` → `session-end.sh`: Session archival

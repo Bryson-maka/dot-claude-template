@@ -100,7 +100,19 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "File modification tracking is disabled."
         )
 
-    # 3c: SessionStart hook
+    # 3c: PostToolUseFailure must have Bash matcher
+    post_fail = hooks.get('PostToolUseFailure', [])
+    has_bash_fail = any(
+        'Bash' in entry.get('matcher', '')
+        for entry in post_fail
+    )
+    if not has_bash_fail:
+        warnings.append(
+            "DRIFT: PostToolUseFailure hook for 'Bash' (notify-bash-failure.sh) is missing. "
+            "Agent won't receive feedback when users deny ASK-tier commands."
+        )
+
+    # 3d: SessionStart hook
     if not hooks.get('SessionStart'):
         warnings.append("DRIFT: SessionStart hook (session-init.sh) is missing.")
 

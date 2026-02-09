@@ -9,7 +9,7 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: prompt
-          prompt: "A git command is about to run: $ARGUMENTS. The user is in a session conclusion workflow (committing, pushing, archiving). Verify this command is safe for a conclude phase - it should be a read-only git command (status, diff, log) OR a standard commit/push. Block any destructive git operations (reset, rebase, force push, branch delete). Respond with {\"ok\": true} or {\"ok\": false, \"reason\": \"explanation\"}."
+          prompt: "A Bash command is about to run during session conclusion: $ARGUMENTS. Allow git commands (status, diff, log, add, commit, push, tag), python scripts, file cleanup (rm, mv) that the user explicitly requested, and standard shell commands (ls, cat, echo). Block ONLY destructive git operations (reset --hard, rebase, force push, branch -D, clean -f) and system-level destructive commands (rm -rf /, chmod -R 777). When in doubt, allow — the global validate-bash.sh hook handles security tiers. Respond with {\"ok\": true} or {\"ok\": false, \"reason\": \"explanation\"}."
           timeout: 15
 ---
 

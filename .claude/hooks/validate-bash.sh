@@ -15,6 +15,9 @@
 # Four security tiers:
 #   1. BLOCKED - always denied (catastrophic/irreversible system-level ops)
 #   2. ASK     - user prompted for confirmation (destructive but legitimate dev ops)
+#              NOTE: permissionDecisionReason is shown to the USER, not Claude.
+#              We emit additionalContext alongside "ask" so Claude knows what was
+#              flagged regardless of whether the user accepts or denies.
 #   3. WARN    - allowed with context warning to Claude (side-effect commands)
 #   4. ALLOW   - silent pass-through (everything else)
 #
@@ -31,18 +34,33 @@ if [ -z "$COMMAND" ]; then
 fi
 
 # Helper: emit structured decision and exit
+#
+# For "ask" decisions, permissionDecisionReason is shown to the USER in the
+# permission dialog, but NOT to Claude. We include additionalContext so Claude
+# knows what was flagged regardless of whether the user accepts or denies.
+# For "deny" decisions, permissionDecisionReason IS shown to Claude directly.
 emit_decision() {
   local decision="$1"
   local reason="$2"
   python3 -c "
 import json, sys
-print(json.dumps({
-    'hookSpecificOutput': {
-        'hookEventName': 'PreToolUse',
-        'permissionDecision': sys.argv[1],
-        'permissionDecisionReason': sys.argv[2]
-    }
-}))
+decision = sys.argv[1]
+reason = sys.argv[2]
+hso = {
+    'hookEventName': 'PreToolUse',
+    'permissionDecision': decision,
+    'permissionDecisionReason': reason
+}
+# For 'ask' decisions, emit additionalContext so Claude knows what
+# was flagged. The user sees the reason in the permission dialog; Claude
+# sees additionalContext regardless of accept/deny outcome.
+# For 'allow' decisions with a reason, emit it as context so Claude is
+# informed (e.g., WARN tier, safe-delete downgrades).
+if decision == 'ask':
+    hso['additionalContext'] = '[ASK] ' + reason + '. User was prompted to accept or deny.'
+elif decision == 'allow' and reason:
+    hso['additionalContext'] = reason
+print(json.dumps({'hookSpecificOutput': hso}))
 " "$decision" "$reason"
   exit 0
 }
@@ -136,8 +154,7 @@ if echo "$CMD_PREFIX" | grep -qE '\brm\b'; then
   done
 
   if [ "$IS_SAFE_DELETE" = true ]; then
-    echo "{\"additionalContext\": \"Note: Deleting known build artifact. Matched safe_delete_paths in security policy.\"}"
-    exit 0
+    emit_decision "allow" "Deleting known build artifact. Matched safe_delete_paths in security policy."
   else
     emit_decision "ask" "File deletion requested: $CMD_PREFIX"
   fi
@@ -165,8 +182,7 @@ WARNING_PATTERNS=(
 
 for pattern in "${WARNING_PATTERNS[@]}"; do
   if echo "$CMD_PREFIX" | grep -qF "$pattern"; then
-    echo "{\"additionalContext\": \"Warning: '$pattern' has external side effects. Confirm user intent before proceeding.\"}"
-    exit 0
+    emit_decision "allow" "Warning: '$pattern' has external side effects. Confirm user intent before proceeding."
   fi
 done
 

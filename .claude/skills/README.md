@@ -37,9 +37,12 @@ Portable skill system for Claude Code. Clone this `.claude/` directory into any 
 ├── settings.json          # Hooks + permissions (committed)
 ├── settings.local.json    # Personal settings (gitignored)
 ├── hooks/                 # Lifecycle hook scripts
-│   ├── session-init.sh         # SessionStart: env setup
-│   ├── validate-bash.sh        # PreToolUse: block dangerous commands
-│   ├── track-file-changes.sh   # PostToolUse: log modifications (skill-scoped)
+│   ├── session-init.sh         # SessionStart: env setup + integrity check
+│   ├── validate-bash.sh        # PreToolUse/Bash: 4-tier security model
+│   ├── validate-read.sh        # PreToolUse/Read: secret file protection
+│   ├── track-file-changes.sh   # PostToolUse/Edit|Write: log modifications
+│   ├── notify-bash-success.sh  # PostToolUse/Bash: silent cmd acknowledgment
+│   ├── notify-bash-failure.sh  # PostToolUseFailure/Bash: denial feedback
 │   ├── validate-subagent-output.sh  # SubagentStop: quality gate (skill-scoped)
 │   ├── pre-compact-save.sh     # PreCompact: save before context trim
 │   └── session-end.sh          # SessionEnd: log termination
