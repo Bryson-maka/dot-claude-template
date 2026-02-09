@@ -32,6 +32,26 @@ fi
 
 # On fresh startup, validate session state
 if [ "$SOURCE" = "startup" ]; then
+  # Run integrity check to catch template drift early
+  VERIFY_CLI="$PROJECT_DIR/.claude/lib/verify_integrity.py"
+  if [ -f "$VERIFY_CLI" ]; then
+    INTEGRITY=$(python3 "$VERIFY_CLI" --json 2>/dev/null || echo "")
+    if [ -n "$INTEGRITY" ]; then
+      # Use Python to safely construct JSON output (avoids shell quoting issues)
+      echo "$INTEGRITY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+if not data.get('passed', True):
+    warnings = data.get('warnings', [])
+    msg = 'INTEGRITY WARNING: Template drift detected. '
+    msg += 'Run python3 .claude/lib/verify_integrity.py for details. '
+    msg += 'Read .claude/SETTINGS_GUARD.md before modifying settings.json. '
+    msg += 'Issues: ' + '; '.join(warnings)
+    print(json.dumps({'additionalContext': msg}))
+" 2>/dev/null || true
+    fi
+  fi
+
   if [ -f "$STATE_FILE" ]; then
     # Check if state is from a previous session that wasn't concluded
     CONCLUDED=$(python3 -c "

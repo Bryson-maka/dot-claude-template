@@ -52,10 +52,25 @@ The system automatically adapts to your project structure.
 │   ├── validate-subagent-output.sh  # SubagentStop: quality gate
 │   ├── pre-compact-save.sh    # PreCompact: save before context trim
 │   └── session-end.sh         # SessionEnd: log termination
+├── TEMPLATE_VERSION       # Template version for drift detection
+├── SETTINGS_GUARD.md      # Rules for modifying settings.json
 ├── lib/                   # Shared Python library
 ├── skills/                # Slash command skills
 └── session/               # Runtime state (gitignored)
 ```
+
+## Integrity Checking
+
+After copying the `.claude/` directory to a downstream project, configuration can drift over multiple Claude Code sessions. The template includes a self-integrity checker that catches common drift patterns:
+
+```bash
+# Run manually
+python3 .claude/lib/verify_integrity.py
+
+# Runs automatically on session startup via session-init.sh
+```
+
+The checker validates: required hook registrations, absence of harmful deny rules, security tier ordering, script existence, and security policy presence. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
 
 ## Documentation
 
