@@ -116,6 +116,11 @@ if echo "$FILE_PATH" | grep -qE '(^|/)\.claude/settings\.json$'; then
   emit_deny "Security config '.claude/settings.json' — writing to the security configuration is denied"
 fi
 
+# Security policy — prevents weakening safe_delete_paths or secret_files at runtime
+if echo "$FILE_PATH" | grep -qE '(^|/)\.claude/security-policy\.yaml$'; then
+  emit_deny "Security policy '.claude/security-policy.yaml' — writing to the security policy is denied"
+fi
+
 # ============================================================================
 # Load project-specific secret patterns from security-policy.yaml
 # ============================================================================

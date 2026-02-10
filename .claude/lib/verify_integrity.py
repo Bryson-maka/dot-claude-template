@@ -198,7 +198,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                             f"Run: chmod +x {script_path}"
                         )
 
-    # Check 8: security-policy.yaml exists
+    # Check 8: security-policy.yaml exists and has valid structure
     CHECKS_RUN += 1
     policy_path = claude_dir / 'security-policy.yaml'
     if not policy_path.exists():
@@ -206,6 +206,50 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "MISSING: .claude/security-policy.yaml — validate-bash.sh can't read "
             "safe_delete_paths (every 'rm' will trigger ASK even for __pycache__)."
         )
+    else:
+        try:
+            import yaml
+            with open(policy_path, 'r', encoding='utf-8') as f:
+                policy = yaml.safe_load(f) or {}
+
+            # Validate safe_delete_paths is a list of strings
+            sdp = policy.get('safe_delete_paths')
+            if sdp is not None:
+                if not isinstance(sdp, list):
+                    warnings.append(
+                        "INVALID: security-policy.yaml 'safe_delete_paths' must be a list. "
+                        "validate-bash.sh will fall back to no safe paths (all rm triggers ASK)."
+                    )
+                elif not all(isinstance(p, str) for p in sdp):
+                    warnings.append(
+                        "INVALID: security-policy.yaml 'safe_delete_paths' contains non-string entries. "
+                        "validate-bash.sh may fail to match safe paths correctly."
+                    )
+
+            # Validate secret_files is a list of strings (regex patterns)
+            sf = policy.get('secret_files')
+            if sf is not None:
+                if not isinstance(sf, list):
+                    warnings.append(
+                        "INVALID: security-policy.yaml 'secret_files' must be a list. "
+                        "validate-read.sh and validate-write.sh will ignore custom patterns."
+                    )
+                elif not all(isinstance(p, str) for p in sf):
+                    warnings.append(
+                        "INVALID: security-policy.yaml 'secret_files' contains non-string entries."
+                    )
+        except ImportError:
+            warnings.append(
+                "MISSING: PyYAML is not installed. security-policy.yaml structural "
+                "validation skipped. Hook scripts (validate-bash.sh, validate-read.sh, "
+                "validate-write.sh) will also silently ignore policy overrides at runtime. "
+                "Install with: pip install pyyaml (or: uv pip install pyyaml)"
+            )
+        except Exception as e:
+            warnings.append(
+                f"INVALID: security-policy.yaml failed to parse: {e}. "
+                "Hook scripts will fall back to defaults."
+            )
 
     # Check 9: validate-bash.sh tier ordering (blocked before safe)
     CHECKS_RUN += 1

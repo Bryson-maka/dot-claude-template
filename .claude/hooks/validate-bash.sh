@@ -138,8 +138,14 @@ BLOCKED_PATTERNS=(
   "dd if="
   ":\(\)\{.*\|.*&\}"        # fork bomb
   "chmod\s+-R\s+777\s+/"
-  "curl .+\| *(ba)?sh\b"    # pipe to shell (word-bounded)
-  "wget .+\| *(ba)?sh\b"    # pipe to shell
+  "curl .+\|.*\b(ba)?sh\b"  # pipe to shell (catches /bin/sh, env bash, etc.)
+  "wget .+\|.*\b(ba)?sh\b"  # pipe to shell
+  "(ba)?sh\s+<\s*<\(.*curl"    # process substitution: bash < <(curl ...)
+  "(ba)?sh\s+<\s*<\(.*wget"    # process substitution: bash < <(wget ...)
+  "(source|\.)\s+<\(.*curl"    # source/dot process substitution: source <(curl ...)
+  "(source|\.)\s+<\(.*wget"    # source/dot process substitution: source <(wget ...)
+  "eval\s.*\$\(.*curl"         # command substitution: eval "$(curl ...)"
+  "eval\s.*\$\(.*wget"         # command substitution: eval "$(wget ...)"
 )
 
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
@@ -181,19 +187,34 @@ fi
 
 # File/directory deletion — check if it's a known safe-delete path first
 if echo "$COMMAND" | grep -qE '\brm\b'; then
-  # Extract the rm arguments (everything after rm and its flags) to check
-  # safe paths against the target, not the entire command string.
-  RM_ARGS=$(echo "$CMD_PREFIX" | sed -E 's/^.*\brm\b\s+(-[a-zA-Z]+\s+)*//')
-  IS_SAFE_DELETE=false
-  for safe_path in $SAFE_DELETE_PATHS; do
-    if echo "$RM_ARGS" | grep -qF "$safe_path"; then
-      IS_SAFE_DELETE=true
+  # Extract rm target paths from ALL lines of the full command (not just CMD_PREFIX).
+  # This prevents multiline/chained bypass where a safe path allows a dangerous
+  # path in the same command (e.g., "rm -rf node_modules && rm -rf src" or
+  # "rm -rf dist __pycache__ /etc/passwd" with multiple args on one rm).
+  # Strategy: find each rm invocation, strip the rm and flags, keep all remaining
+  # args (split on shell operators, not spaces) as individual targets.
+  # Note: use [[:space:]] instead of \s for POSIX compatibility on macOS sed.
+  ALL_RM_TARGETS=$(echo "$COMMAND" | grep -oE '\brm[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*[^;|&]+' | sed -E 's/^[[:space:]]*rm[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*//' | tr ' ' '\n' | sed '/^$/d')
+  IS_SAFE_DELETE=true
+  HAS_TARGETS=false
+  while IFS= read -r target; do
+    [ -z "$target" ] && continue
+    HAS_TARGETS=true
+    target_safe=false
+    for safe_path in $SAFE_DELETE_PATHS; do
+      if echo "$target" | grep -qF "$safe_path"; then
+        target_safe=true
+        break
+      fi
+    done
+    if [ "$target_safe" = false ]; then
+      IS_SAFE_DELETE=false
       break
     fi
-  done
+  done <<< "$ALL_RM_TARGETS"
 
-  if [ "$IS_SAFE_DELETE" = true ]; then
-    emit_decision "allow" "Deleting known build artifact. Matched safe_delete_paths in security policy."
+  if [ "$HAS_TARGETS" = true ] && [ "$IS_SAFE_DELETE" = true ]; then
+    emit_decision "allow" "Deleting known build artifact(s). All targets matched safe_delete_paths in security policy."
     exit $?
   else
     emit_decision "ask" "File deletion requested: $CMD_PREFIX"
