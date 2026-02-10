@@ -129,9 +129,35 @@ class SessionState:
                 # Validate schema version
                 if state.get('schema_version') != SCHEMA_VERSION:
                     print(f"Warning: State schema version mismatch", file=sys.stderr)
+                # Self-heal: ensure all required fields exist with correct types
+                defaults = self._default_state()
+                # Expected types for nullable string fields
+                _nullable_str = {'primed_at', 'concluded_at', 'schema_version'}
+                for key, default_value in defaults.items():
+                    if key not in state:
+                        state[key] = default_value
+                    elif key in _nullable_str:
+                        # Must be str or None
+                        if state[key] is not None and not isinstance(state[key], str):
+                            print(f"Warning: State field '{key}' has wrong type, resetting", file=sys.stderr)
+                            state[key] = default_value
+                    elif default_value is not None and not isinstance(state[key], type(default_value)):
+                        # Type mismatch — reset to default
+                        print(f"Warning: State field '{key}' has wrong type, resetting", file=sys.stderr)
+                        state[key] = default_value
                 return state
             except (json.JSONDecodeError, IOError) as e:
                 print(f"Warning: Could not load state: {e}", file=sys.stderr)
+                # Try backup
+                backup_path = self.state_path.with_suffix('.json.bak')
+                if backup_path.exists():
+                    try:
+                        with open(backup_path, 'r', encoding='utf-8') as f:
+                            state = json.load(f)
+                        print("Recovered state from backup", file=sys.stderr)
+                        return state
+                    except (json.JSONDecodeError, IOError):
+                        pass
 
         # Return default state
         return self._default_state()
@@ -151,9 +177,17 @@ class SessionState:
         }
 
     def _save(self) -> bool:
-        """Save state to disk."""
+        """Save state to disk with backup."""
         try:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            # Backup existing state before overwrite
+            if self.state_path.exists():
+                backup_path = self.state_path.with_suffix('.json.bak')
+                try:
+                    import shutil
+                    shutil.copy2(self.state_path, backup_path)
+                except IOError:
+                    pass  # Best-effort backup
             with open(self.state_path, 'w', encoding='utf-8') as f:
                 json.dump(self.state, f, indent=2)
             return True

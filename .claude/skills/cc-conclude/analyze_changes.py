@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, asdict, field
@@ -33,6 +34,19 @@ try:
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
+
+# Import shared skill helpers
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'lib'))
+try:
+    from skill_helpers import get_base_dir, load_yaml_config, get_session_context as _shared_get_session_context
+    HAS_SKILL_HELPERS = True
+except ImportError:
+    HAS_SKILL_HELPERS = False
+finally:
+    # Clean up sys.path after import
+    lib_path = str(Path(__file__).parent.parent.parent / 'lib')
+    if lib_path in sys.path:
+        sys.path.remove(lib_path)
 
 
 # Default triggers (used if workflow.yaml not found or yaml not installed)
@@ -67,6 +81,14 @@ def load_config() -> dict:
 
     Returns the readme_triggers section, or defaults if file not found.
     """
+    if HAS_SKILL_HELPERS:
+        config_path = Path(__file__).parent / 'workflow.yaml'
+        full_config = load_yaml_config(config_path, {})
+        if full_config and 'readme_triggers' in full_config:
+            return full_config['readme_triggers']
+        return DEFAULT_README_TRIGGERS
+
+    # Fallback if skill_helpers not available
     if not HAS_YAML:
         return DEFAULT_README_TRIGGERS
 
@@ -252,18 +274,29 @@ def get_file_changes() -> list[FileChange]:
         changes.append(FileChange(path=path, status=status_char))
 
     # Get diff stats for modified/added files
-    diff_stat = run_git(['diff', '--numstat', 'HEAD'])
-    stat_map = {}
+    # Check if HEAD exists (fails on initial commit)
+    if HAS_SKILL_HELPERS:
+        base_dir = get_base_dir(__file__)
+    else:
+        script_dir = Path(__file__).parent.resolve()
+        base_dir = script_dir.parent.parent.parent.resolve()
+    head_exists = subprocess.run(
+        ['git', 'rev-parse', '--verify', 'HEAD'],
+        capture_output=True, cwd=str(base_dir)
+    ).returncode == 0
 
-    for line in diff_stat.split('\n'):
-        if not line:
-            continue
-        parts = line.split('\t')
-        if len(parts) >= 3:
-            insertions = int(parts[0]) if parts[0] != '-' else 0
-            deletions = int(parts[1]) if parts[1] != '-' else 0
-            path = parts[2]
-            stat_map[path] = (insertions, deletions)
+    stat_map = {}
+    if head_exists:
+        diff_stat = run_git(['diff', '--numstat', 'HEAD'])
+        for line in diff_stat.split('\n'):
+            if not line:
+                continue
+            parts = line.split('\t')
+            if len(parts) >= 3:
+                insertions = int(parts[0]) if parts[0] != '-' else 0
+                deletions = int(parts[1]) if parts[1] != '-' else 0
+                path = parts[2]
+                stat_map[path] = (insertions, deletions)
 
     # Apply stats to changes
     for change in changes:
@@ -389,7 +422,7 @@ def generate_recommendations(
     # Priority 1: Stage unstaged files before commit
     if unstaged_files:
         # Recommend staging specific files (not git add -A)
-        files_str = ' '.join(f'"{f}"' for f in unstaged_files[:5])
+        files_str = ' '.join(shlex.quote(f) for f in unstaged_files[:5])
         if len(unstaged_files) > 5:
             files_str += f' # ... and {len(unstaged_files) - 5} more'
 
@@ -408,7 +441,7 @@ def generate_recommendations(
                          if not any(p in f for p in ignore_patterns)]
 
         if safe_untracked:
-            files_str = ' '.join(f'"{f}"' for f in safe_untracked[:5])
+            files_str = ' '.join(shlex.quote(f) for f in safe_untracked[:5])
             if len(safe_untracked) > 5:
                 files_str += f' # ... and {len(safe_untracked) - 5} more'
 
@@ -469,9 +502,38 @@ def get_session_context() -> SessionContext | None:
     and what was done during execution.
     """
     # Find project root (where .claude/ lives)
-    script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir.parent.parent.parent.resolve()
+    if HAS_SKILL_HELPERS:
+        base_dir = get_base_dir(__file__)
+    else:
+        script_dir = Path(__file__).parent.resolve()
+        base_dir = script_dir.parent.parent.parent.resolve()
 
+    # Use shared helper if available
+    if HAS_SKILL_HELPERS:
+        shared_ctx = _shared_get_session_context(base_dir)
+        if shared_ctx is None:
+            return None
+
+        # Convert dict to SessionContext dataclass
+        # The shared helper includes execution_journal; we need tasks_completed count
+        journal = shared_ctx.get('execution_journal', [])
+        tasks_completed = sum(
+            1 for e in journal if e.get('type') == 'task_completed'
+        )
+
+        return SessionContext(
+            primed=shared_ctx.get('primed', False),
+            domains=shared_ctx.get('domains', []),
+            foundation_docs=shared_ctx.get('foundation_docs', []),
+            manifest_path=shared_ctx.get('manifest_path'),
+            state_path=shared_ctx.get('state_path'),
+            tasks_completed=tasks_completed,
+            subagents_spawned=shared_ctx.get('subagents_spawned', 0),
+            verifications=shared_ctx.get('verifications', []),
+            files_modified_by_session=shared_ctx.get('files_modified_by_session', []),
+        )
+
+    # Fallback if skill_helpers not available
     state_path = base_dir / '.claude' / 'session' / 'state.json'
     manifest_path = base_dir / '.claude' / 'session' / 'manifest.json'
 
@@ -532,8 +594,11 @@ def conclude_session() -> bool:
 
     Called after successful commit to archive session data.
     """
-    script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir.parent.parent.parent.resolve()
+    if HAS_SKILL_HELPERS:
+        base_dir = get_base_dir(__file__)
+    else:
+        script_dir = Path(__file__).parent.resolve()
+        base_dir = script_dir.parent.parent.parent.resolve()
 
     # Import session_state from lib directory
     lib_dir = base_dir / '.claude' / 'lib'

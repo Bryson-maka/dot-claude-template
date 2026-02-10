@@ -31,6 +31,19 @@ try:
 except ImportError:
     HAS_YAML = False
 
+# Import shared skill helpers
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'lib'))
+try:
+    from skill_helpers import get_base_dir, load_yaml_config, get_session_context
+    HAS_SKILL_HELPERS = True
+except ImportError:
+    HAS_SKILL_HELPERS = False
+finally:
+    # Clean up sys.path after import
+    lib_path = str(Path(__file__).parent.parent.parent / 'lib')
+    if lib_path in sys.path:
+        sys.path.remove(lib_path)
+
 
 # Default project detection (used if workflow.yaml not found)
 DEFAULT_PROJECT_DETECTION = {
@@ -57,6 +70,11 @@ DEFAULT_PROJECT_DETECTION = {
 
 def load_config() -> dict:
     """Load configuration from workflow.yaml."""
+    if HAS_SKILL_HELPERS:
+        config_path = Path(__file__).parent / 'workflow.yaml'
+        return load_yaml_config(config_path, {'project_detection': DEFAULT_PROJECT_DETECTION})
+
+    # Fallback if skill_helpers not available
     if not HAS_YAML:
         return {'project_detection': DEFAULT_PROJECT_DETECTION}
 
@@ -140,9 +158,9 @@ def get_available_commands(
     return commands
 
 
-def get_session_context(base_dir: Path) -> dict | None:
+def _local_get_session_context(base_dir: Path) -> dict | None:
     """
-    Load session context from session state and manifest.
+    Fallback session context loader when skill_helpers unavailable.
 
     This allows cc-execute to reference domains/files discovered during priming,
     as well as the execution journal for continuity.
@@ -156,6 +174,7 @@ def get_session_context(base_dir: Path) -> dict | None:
         'execution_journal': [],
         'subagents_spawned': 0,
         'verifications': [],
+        'files_modified_by_session': [],
     }
 
     # Check for session state (primary source)
@@ -171,6 +190,7 @@ def get_session_context(base_dir: Path) -> dict | None:
             context['execution_journal'] = state.get('execution_journal', [])
             context['subagents_spawned'] = len(state.get('subagents', []))
             context['verifications'] = state.get('verification_results', [])
+            context['files_modified_by_session'] = state.get('files_modified', [])
         except (json.JSONDecodeError, IOError):
             pass
 
@@ -201,7 +221,14 @@ def discover(base_dir: Path) -> dict:
 
     detected_types = detect_project_types(base_dir, detection_config)
     commands = get_available_commands(base_dir, detected_types, detection_config)
-    session = get_session_context(base_dir)
+
+    # Use shared helper if available, otherwise use local fallback
+    if HAS_SKILL_HELPERS:
+        session = get_session_context(base_dir)
+        if session is None:
+            session = _local_get_session_context(base_dir)
+    else:
+        session = _local_get_session_context(base_dir)
 
     # Get subagent config
     subagents = config.get('subagents', {})
@@ -249,11 +276,13 @@ def main():
     args = parser.parse_args()
 
     # Determine base directory
-    script_dir = Path(__file__).parent.resolve()
     if args.base_dir:
         base_dir = args.base_dir.resolve()
+    elif HAS_SKILL_HELPERS:
+        base_dir = get_base_dir(__file__)
     else:
-        # Go up from .claude/skills/cc-execute/ to project root
+        # Fallback: Go up from .claude/skills/cc-execute/ to project root
+        script_dir = Path(__file__).parent.resolve()
         base_dir = script_dir.parent.parent.parent.resolve()
 
     if args.config:

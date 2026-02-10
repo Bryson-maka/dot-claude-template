@@ -332,21 +332,21 @@ def analyze_directories(files: List[FileStats], base_dir: Path) -> List[Director
         dir_name = Path(dir_path).name.lower()
         languages = list(set(f.language for f in dir_file_list if f.language != 'unknown'))
 
-        # Infer purpose
+        # Infer purpose using word-boundary regex to avoid false matches
         purpose = 'unknown'
-        if any(x in dir_name for x in ['test', 'spec', '__test__']):
+        if re.search(r'\b(test(s|ing)?|spec(s)?|__test__)\b', dir_name, re.IGNORECASE):
             purpose = 'tests'
-        elif any(x in dir_name for x in ['src', 'lib', 'app', 'pkg', 'internal']):
+        elif re.search(r'\b(src|lib(s|rary)?|app(s)?|pkg|internal)\b', dir_name, re.IGNORECASE):
             purpose = 'source'
-        elif any(x in dir_name for x in ['doc', 'docs', 'documentation']):
+        elif re.search(r'\b(doc(s|umentation)?)\b', dir_name, re.IGNORECASE):
             purpose = 'docs'
-        elif any(x in dir_name for x in ['script', 'bin', 'tool', 'util']):
+        elif re.search(r'\b(script(s)?|bin|tool(s)?|util(s|ity|ities)?)\b', dir_name, re.IGNORECASE):
             purpose = 'scripts'
-        elif any(x in dir_name for x in ['config', 'conf', 'cfg', 'settings']):
+        elif re.search(r'\b(config(s)?|conf|cfg|settings?)\b', dir_name, re.IGNORECASE):
             purpose = 'config'
-        elif any(x in dir_name for x in ['example', 'sample', 'demo']):
+        elif re.search(r'\b(example(s)?|sample(s)?|demo(s)?)\b', dir_name, re.IGNORECASE):
             purpose = 'examples'
-        elif any(x in dir_name for x in ['asset', 'static', 'public', 'resource']):
+        elif re.search(r'\b(asset(s)?|static|public|resource(s)?)\b', dir_name, re.IGNORECASE):
             purpose = 'assets'
         elif dir_name in DATA_DIR_PATTERNS:
             purpose = 'unknown'  # Explicitly skip data/artifact dirs

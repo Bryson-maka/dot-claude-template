@@ -1,6 +1,6 @@
 ---
 name: cc-prime-cw
-description: Load codebase context at session start using analyst subagents
+description: Load codebase context via parallel analyst subagents
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep, Task, Bash
 hooks:

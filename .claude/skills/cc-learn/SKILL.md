@@ -1,8 +1,8 @@
 ---
 name: cc-learn
-description: Analyze project and evolve .claude configuration based on discovered patterns
+description: Analyze project and auto-detect languages, frameworks, and configuration
 disable-model-invocation: true
-allowed-tools: Read, Glob, Grep, Bash, Edit, Write, AskUserQuestion
+allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion
 argument-hint: [--apply | --preview | --diff]
 ---
 

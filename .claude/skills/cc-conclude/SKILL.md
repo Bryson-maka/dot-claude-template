@@ -1,8 +1,8 @@
 ---
 name: cc-conclude
-description: Wrap up session with summary, README updates, and git commit workflow
+description: Generate session summary, update docs, and execute git workflow
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task
+allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task, AskUserQuestion
 argument-hint: [--commit | --no-readme]
 ---
 
@@ -30,6 +30,10 @@ The output above includes:
 - (default): Full workflow with all checks
 
 ---
+
+## No Prior Session
+
+If `/cc-prime-cw` and `/cc-execute` were not run in this session, skip Phase 2 (Summarize session context) and proceed directly with Phase 1 (Gather git state) and Phase 4 (Git Commit). The git state analysis provides enough context for a meaningful commit workflow without prior session data.
 
 ## Workflow
 

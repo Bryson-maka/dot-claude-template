@@ -42,7 +42,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Dict
 
 try:
     import yaml
@@ -52,6 +52,19 @@ except ImportError:
         file=sys.stderr
     )
     sys.exit(1)
+
+# Import shared skill helpers
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'lib'))
+try:
+    from skill_helpers import get_base_dir
+    HAS_SKILL_HELPERS = True
+except ImportError:
+    HAS_SKILL_HELPERS = False
+finally:
+    # Clean up sys.path after import
+    lib_path = str(Path(__file__).parent.parent.parent / 'lib')
+    if lib_path in sys.path:
+        sys.path.remove(lib_path)
 
 
 # Size classification thresholds
@@ -108,7 +121,7 @@ def classify_size(line_count: int) -> str:
         return "SMALL"
 
 
-def calculate_chunks(line_count: int) -> list[list[int]] | None:
+def calculate_chunks(line_count: int) -> Optional[List[List[int]]]:
     """
     Calculate chunk ranges for files that need chunking.
 
@@ -269,9 +282,6 @@ def process_domain(
     # Enforce max_files_per_domain limit if configured
     if max_files and len(files_info) > max_files:
         files_info = files_info[:max_files]
-
-    # Re-sort by path for consistent output after truncation
-    files_info.sort(key=lambda x: x['path'])
 
     # Handle description that may be multiline
     description = domain_config.get('description', '')
@@ -660,6 +670,8 @@ def main():
     # Default base directory is project root (3 levels up from .claude/skills/context-priming/)
     if args.base_dir:
         base_dir = args.base_dir.resolve()
+    elif HAS_SKILL_HELPERS:
+        base_dir = get_base_dir(__file__)
     else:
         base_dir = script_dir.parent.parent.parent.resolve()
 

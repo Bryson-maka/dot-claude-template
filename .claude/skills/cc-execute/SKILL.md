@@ -1,6 +1,6 @@
 ---
 name: cc-execute
-description: Structured task execution with subagent deployment and todo tracking
+description: Execute tasks with structured subagent orchestration and adversarial review
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Task, Bash, Edit, Write, NotebookEdit, AskUserQuestion
 argument-hint: [task description]
@@ -92,7 +92,7 @@ Maximum 2 adversarial rounds. If still challenged, ask user.
 | **Implementer** | general-purpose | Sonnet | Make code changes |
 | **Verifier** | general-purpose | Sonnet | Run tests, confirm changes |
 | **Adversary** | Explore | Sonnet | Challenge claims, find holes |
-| **Reasoner** | Explore | Opus | Complex analysis, design decisions |
+| **Reasoner** | Explore | Opus | Complex analysis, design decisions, architecture |
 
 ---
 
@@ -109,6 +109,6 @@ User: /cc-execute Fix the config parsing bug
 4. Small fix - edit directly: Add type check at line 145
 5. Spawn verifier: "Run pytest tests/test_config.py"
 6. Verifier: Tests pass
-7. Adversarial Challenge: run up to 2 chanllenges and reflect on output of each and reason about how to intelligently address
+7. Adversarial Challenge: run up to 2 challenges and reflect on output of each and reason about how to intelligently address
 8. Mark todos complete, summarize full scope of execution
 ```
