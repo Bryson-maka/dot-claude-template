@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# PreToolUse hook: Protect secret files from being read
+# PreToolUse hook: Protect secret/critical files from being written to
 #
 # Hook protocol (PreToolUse):
-#   - Receives JSON on stdin: { "tool_name": "Read", "tool_input": { "file_path": "..." } }
+#   - Receives JSON on stdin: { "tool_name": "Edit"|"Write", "tool_input": { "file_path": "..." } }
 #   - Exit 0 + JSON = decision
 #   - Exit 2 = block with stderr message
 #
-# Philosophy: Secret files are HARD DENIED — the agent should never prompt
-# the user for access to credentials. Prompting could catch humans off guard
-# into approving. Instead, the agent should:
-#   - Read .env.sample or .env.example for variable names/structure
-#   - Test credentials by running actual API calls (e.g., health check endpoints)
-#   - Never need the raw secret values
+# Philosophy: Secret and critical files are HARD DENIED for writes — the agent
+# should never be able to modify credentials, keys, or security configuration.
+# Unlike read hooks, write hooks also protect .git internals and the security
+# config itself (.claude/settings.json) to prevent self-modification attacks.
+#
+#   Safe env templates (.env.example, .env.sample, .env.template) ARE writable
+#   because the agent may legitimately scaffold them for the user.
 #
 # Customize protected patterns via .claude/security-policy.yaml
 
@@ -20,16 +21,16 @@ set -euo pipefail
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo "")
 
-# Fail closed: if we can't parse the file path, block the read
 if [ -z "$FILE_PATH" ]; then
-  echo "validate-read: could not parse file_path from hook input" >&2
+  # Fail-closed: if we can't parse the path, block the write
+  echo "validate-write: could not parse file_path from hook input — blocking write (fail-closed)" >&2
   exit 2
 fi
 
 # Extract just the filename for matching
 FILENAME=$(basename "$FILE_PATH")
 
-# Helper: emit deny decision
+# Helper: emit deny decision (uses sys.argv, NOT shell interpolation in Python)
 emit_deny() {
   local reason="$1"
   python3 -c "
@@ -42,7 +43,7 @@ print(json.dumps({
     }
 }))
 " "$reason" && exit 0
-  # python3 failed — fall back to exit 2 (block) so secrets stay protected
+  # python3 failed — fall back to exit 2 (block) so files stay protected
   echo "Blocked: $reason (hook JSON emit failed)" >&2
   exit 2
 }
@@ -50,10 +51,11 @@ print(json.dumps({
 # ============================================================================
 # ALLOWED: Safe env templates (check BEFORE deny patterns)
 # These contain structure/variable names but not actual secrets.
+# The agent may scaffold these for the user.
 # ============================================================================
 SAFE_PATTERNS=(
-  ".env.sample"
   ".env.example"
+  ".env.sample"
   ".env.template"
   ".env.defaults"
   ".env.test"
@@ -66,17 +68,14 @@ for safe in "${SAFE_PATTERNS[@]}"; do
 done
 
 # ============================================================================
-# HARD DENY: Secret files — never prompt, never allow
-# These are silently blocked. The agent should use .env.sample for structure
-# and test credentials via API calls, not by reading raw values.
+# HARD DENY: Secret files — never prompt, never allow writes
 # ============================================================================
 
 # .env files: deny ALL .env* files that weren't already allowed above.
-# Safe patterns (.env.sample, .env.example, .env.template, .env.defaults, .env.test)
-# are checked first and exit early. Everything else (.env, .env.local, .env.production,
-# .env.dev, .env.anything) is denied — no enumeration needed.
+# Safe patterns (.env.example, .env.sample, .env.template) are checked first
+# and exit early. Everything else (.env, .env.local, .env.production, etc.) is denied.
 if [ "$FILENAME" = ".env" ] || echo "$FILENAME" | grep -qE '^\.env\.'; then
-  emit_deny "Secret file '$FILENAME' — read .env.sample for structure, test credentials via API calls"
+  emit_deny "Secret file '$FILENAME' — writing to env files is denied; use .env.example for templates"
 fi
 
 # Credential/key files (pattern matches against filename)
@@ -97,16 +96,25 @@ SECRET_PATTERNS=(
   "gcp-credentials\.json"
 )
 
-# Public keys are NOT secrets — allow them before checking secret patterns
-if echo "$FILENAME" | grep -qE '\.(pub)$'; then
-  exit 0
-fi
-
 for pattern in "${SECRET_PATTERNS[@]}"; do
   if echo "$FILENAME" | grep -qE "^${pattern}$"; then
-    emit_deny "Credential file '$FILENAME' — never read secrets directly"
+    emit_deny "Credential/key file '$FILENAME' — writing to secret files is denied"
   fi
 done
+
+# ============================================================================
+# HARD DENY: .git internal files — protect repository integrity
+# ============================================================================
+if echo "$FILE_PATH" | grep -qE '(^|/)\.git/'; then
+  emit_deny "Git internal file '$FILE_PATH' — direct writes to .git/ are denied"
+fi
+
+# ============================================================================
+# HARD DENY: Security config — prevent self-modification attacks
+# ============================================================================
+if echo "$FILE_PATH" | grep -qE '(^|/)\.claude/settings\.json$'; then
+  emit_deny "Security config '.claude/settings.json' — writing to the security configuration is denied"
+fi
 
 # ============================================================================
 # Load project-specific secret patterns from security-policy.yaml
@@ -130,7 +138,7 @@ except Exception:
   while IFS= read -r pattern; do
     [ -z "$pattern" ] && continue
     if echo "$FILENAME" | grep -qE "$pattern"; then
-      emit_deny "Project-protected secret file '$FILENAME' (from security-policy.yaml)"
+      emit_deny "Project-protected secret file '$FILENAME' (from security-policy.yaml) — writing denied"
     fi
   done <<< "$EXTRA_SECRETS"
 fi

@@ -3,11 +3,7 @@
 Template Integrity Verifier
 
 Validates that the .claude/ directory hasn't drifted from template requirements.
-Catches the specific failure modes documented in HARDENING_BRIEF.md:
-  1. Read(.env*) deny rule injection in settings.json
-  2. Hook registration stripped from settings.json
-  3. validate-bash.sh tier ordering regression
-  4. Missing security-policy.yaml
+Checks security settings, hook registrations, tier ordering, and documentation sync.
 
 Usage:
     python3 .claude/lib/verify_integrity.py          # Exit 0 if clean, 1 if warnings
@@ -36,11 +32,17 @@ except ImportError:
         return current
 
 
+CHECKS_RUN = 0
+
+
 def verify_integrity(base_dir: Path | None = None) -> list[str]:
     """Run all integrity checks.
 
     Returns list of warning strings. Empty list = all checks passed.
     """
+    global CHECKS_RUN
+    CHECKS_RUN = 0
+
     if base_dir is None:
         base_dir = get_project_root()
 
@@ -48,6 +50,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
     warnings: list[str] = []
 
     # Check 1: settings.json exists and has required structure
+    CHECKS_RUN += 1
     settings_path = claude_dir / 'settings.json'
     if not settings_path.exists():
         warnings.append("CRITICAL: .claude/settings.json is missing")
@@ -60,8 +63,27 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
         warnings.append(f"CRITICAL: .claude/settings.json is invalid JSON: {e}")
         return warnings
 
-    # Check 2: Deny list does NOT contain Read(.env patterns
-    deny_list = settings.get('permissions', {}).get('deny', [])
+    # Check 2: $schema present for IDE validation
+    CHECKS_RUN += 1
+    if '$schema' not in settings:
+        warnings.append(
+            "MISSING: $schema key not set in settings.json. "
+            "Add '\"$schema\": \"https://json.schemastore.org/claude-code-settings.json\"' "
+            "for IDE validation and autocompletion."
+        )
+
+    # Check 3: disableBypassPermissionsMode is set
+    CHECKS_RUN += 1
+    perms = settings.get('permissions', {})
+    if perms.get('disableBypassPermissionsMode') != 'disable':
+        warnings.append(
+            "SECURITY: disableBypassPermissionsMode is not set to 'disable'. "
+            "The entire security model can be bypassed with --dangerously-skip-permissions."
+        )
+
+    # Check 4: Deny list does NOT contain Read(.env patterns
+    CHECKS_RUN += 1
+    deny_list = perms.get('deny', [])
     for rule in deny_list:
         if 'Read(' in rule and '.env' in rule:
             warnings.append(
@@ -70,10 +92,24 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                 "which allows .env.example/.env.sample/.env.template."
             )
 
-    # Check 3: Required hook registrations exist
+    # Check 5: No deny/ask conflicts (deny takes precedence, making ask patterns dead)
+    CHECKS_RUN += 1
+    ask_list = perms.get('ask', [])
+    for deny_rule in deny_list:
+        deny_pattern = deny_rule.replace('Bash(', '').rstrip(')*')
+        for ask_rule in ask_list:
+            ask_pattern = ask_rule.replace('Bash(', '').rstrip(')*')
+            if deny_pattern and ask_pattern and deny_pattern in ask_pattern:
+                warnings.append(
+                    f"CONFLICT: deny rule '{deny_rule}' overrides ask rule '{ask_rule}'. "
+                    "Deny takes absolute precedence — the ask prompt will never fire."
+                )
+
+    # Check 6: Required hook registrations exist
+    CHECKS_RUN += 1
     hooks = settings.get('hooks', {})
 
-    # 3a: PreToolUse must have both Bash and Read matchers
+    # 6a: PreToolUse must have Bash, Read, and Edit|Write matchers
     pre_tool_use = hooks.get('PreToolUse', [])
     pre_matchers = {entry.get('matcher', '') for entry in pre_tool_use}
 
@@ -87,8 +123,17 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "DRIFT: PreToolUse hook for 'Read' (validate-read.sh) is missing from settings.json. "
             "This disables secret file protection — .env files will be readable."
         )
+    has_write_hook = any(
+        'Edit' in entry.get('matcher', '') or 'Write' in entry.get('matcher', '')
+        for entry in pre_tool_use
+    )
+    if not has_write_hook:
+        warnings.append(
+            "DRIFT: PreToolUse hook for 'Edit|Write' (validate-write.sh) is missing. "
+            "Secret files are unprotected from writes."
+        )
 
-    # 3b: PostToolUse must have Edit|Write matcher
+    # 6b: PostToolUse must have Edit|Write matcher
     post_tool_use = hooks.get('PostToolUse', [])
     has_edit_write = any(
         'Edit' in entry.get('matcher', '') or 'Write' in entry.get('matcher', '')
@@ -100,7 +145,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "File modification tracking is disabled."
         )
 
-    # 3c: PostToolUseFailure must have Bash matcher
+    # 6c: PostToolUseFailure must have Bash matcher
     post_fail = hooks.get('PostToolUseFailure', [])
     has_bash_fail = any(
         'Bash' in entry.get('matcher', '')
@@ -112,11 +157,27 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "Agent won't receive feedback when users deny ASK-tier commands."
         )
 
-    # 3d: SessionStart hook
-    if not hooks.get('SessionStart'):
+    # 6d: SessionStart hook with compact matcher
+    session_start = hooks.get('SessionStart', [])
+    if not session_start:
         warnings.append("DRIFT: SessionStart hook (session-init.sh) is missing.")
+    else:
+        matcher = session_start[0].get('matcher', '')
+        if 'compact' not in matcher:
+            warnings.append(
+                "DRIFT: SessionStart matcher is missing 'compact'. "
+                "Environment variables and context will be lost after compaction."
+            )
 
-    # Check 4: All referenced hook scripts exist and are executable
+    # 6e: PreCompact hook
+    if not hooks.get('PreCompact'):
+        warnings.append(
+            "DRIFT: PreCompact hook (pre-compact-save.sh) is missing. "
+            "Session state won't be preserved before context trimming."
+        )
+
+    # Check 7: All referenced hook scripts exist and are executable
+    CHECKS_RUN += 1
     for event_name, event_hooks in hooks.items():
         for entry in event_hooks:
             for hook in entry.get('hooks', []):
@@ -137,7 +198,8 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                             f"Run: chmod +x {script_path}"
                         )
 
-    # Check 5: security-policy.yaml exists
+    # Check 8: security-policy.yaml exists
+    CHECKS_RUN += 1
     policy_path = claude_dir / 'security-policy.yaml'
     if not policy_path.exists():
         warnings.append(
@@ -145,7 +207,8 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "safe_delete_paths (every 'rm' will trigger ASK even for __pycache__)."
         )
 
-    # Check 6: validate-bash.sh tier ordering (blocked before safe)
+    # Check 9: validate-bash.sh tier ordering (blocked before safe)
+    CHECKS_RUN += 1
     bash_hook = claude_dir / 'hooks' / 'validate-bash.sh'
     if bash_hook.exists():
         try:
@@ -164,12 +227,59 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
         except IOError:
             pass
 
-    # Check 7: Required lib scripts exist
+    # Check 10: Required lib scripts exist
+    CHECKS_RUN += 1
     required_libs = ['session_state.py', 'project_analyzer.py']
     for lib_name in required_libs:
         lib_path = claude_dir / 'lib' / lib_name
         if not lib_path.exists():
             warnings.append(f"MISSING: .claude/lib/{lib_name}")
+
+    # Check 11: Cross-reference SETTINGS_GUARD.md hook list against actual settings.json
+    CHECKS_RUN += 1
+    guard_path = claude_dir / 'SETTINGS_GUARD.md'
+    if guard_path.exists():
+        try:
+            guard_content = guard_path.read_text(encoding='utf-8')
+            # Extract hook script names from guard doc
+            guard_scripts = set(re.findall(r'`(\w[\w-]+\.sh)`', guard_content))
+            # Extract hook script names from settings.json
+            settings_scripts = set()
+            for event_hooks in hooks.values():
+                for entry in event_hooks:
+                    for hook in entry.get('hooks', []):
+                        cmd = hook.get('command', '')
+                        match = re.search(r'([\w-]+\.sh)', cmd)
+                        if match:
+                            settings_scripts.add(match.group(1))
+
+            # Scripts in guard but not in settings
+            guard_only = guard_scripts - settings_scripts
+            for script in guard_only:
+                warnings.append(
+                    f"DRIFT: SETTINGS_GUARD.md documents '{script}' but it's not "
+                    "registered in settings.json. Guard documentation has drifted."
+                )
+
+            # Scripts in settings but not in guard
+            settings_only = settings_scripts - guard_scripts
+            for script in settings_only:
+                warnings.append(
+                    f"DRIFT: settings.json registers '{script}' but it's not "
+                    "documented in SETTINGS_GUARD.md. Guard documentation needs updating."
+                )
+        except IOError:
+            pass
+
+    # Check 12: enableAllProjectMcpServers should be false for security
+    CHECKS_RUN += 1
+    if settings.get('enableAllProjectMcpServers') is not False:
+        # Only warn if the key is present and set to true, or missing entirely
+        if settings.get('enableAllProjectMcpServers') is True:
+            warnings.append(
+                "SECURITY: enableAllProjectMcpServers is true. "
+                "For a security template, MCP server approval should be opt-in."
+            )
 
     return warnings
 
@@ -195,7 +305,7 @@ def main():
         print(json.dumps({
             "passed": len(warnings) == 0,
             "warnings": warnings,
-            "checks_run": 7,
+            "checks_run": CHECKS_RUN,
         }))
     elif warnings:
         for w in warnings:

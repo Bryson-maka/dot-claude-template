@@ -27,7 +27,45 @@ set -euo pipefail
 
 # Read the tool input from stdin
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null || echo "")
+
+# Parse command and (if policy file exists) safe_delete_paths in one python3 call
+# to reduce subprocess overhead.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+POLICY_FILE="$PROJECT_DIR/.claude/security-policy.yaml"
+
+PARSED=$(python3 -c "
+import json, sys, os
+
+# Parse command from hook JSON
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+    command = data.get('tool_input', {}).get('command', '')
+except Exception:
+    command = ''
+
+# Parse safe_delete_paths from security-policy.yaml (if it exists)
+safe_delete = ''
+policy_file = sys.argv[2]
+if os.path.isfile(policy_file):
+    try:
+        import yaml
+        with open(policy_file) as f:
+            policy = yaml.safe_load(f) or {}
+        paths = policy.get('safe_delete_paths', [])
+        safe_delete = ' '.join(paths)
+    except Exception:
+        pass
+
+# Output: first line = command, second line = safe_delete_paths
+# Use a delimiter that won't appear in commands
+print(command)
+print('---SAFE_DELETE_SEPARATOR---')
+print(safe_delete)
+" "$INPUT" "$POLICY_FILE" 2>/dev/null || echo "")
+
+COMMAND=$(echo "$PARSED" | sed -n '1,/^---SAFE_DELETE_SEPARATOR---$/{ /^---SAFE_DELETE_SEPARATOR---$/d; p; }')
+SAFE_DELETE_PATHS=$(echo "$PARSED" | sed -n '/^---SAFE_DELETE_SEPARATOR---$/,$ { /^---SAFE_DELETE_SEPARATOR---$/d; p; }')
 
 if [ -z "$COMMAND" ]; then
   exit 0
@@ -75,26 +113,10 @@ print(json.dumps({'hookSpecificOutput': hso}))
 CMD_PREFIX=$(echo "$COMMAND" | head -1 | cut -c1-200)
 
 # ============================================================================
-# Load project-specific overrides from security-policy.yaml (if exists)
+# Project-specific overrides (parsed above with command extraction)
+# SAFE_DELETE_PATHS and POLICY_FILE are already set from the consolidated
+# python3 invocation at the top of this script.
 # ============================================================================
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-POLICY_FILE="$PROJECT_DIR/.claude/security-policy.yaml"
-
-# Parse policy file for safe_delete_paths (space-separated list)
-SAFE_DELETE_PATHS=""
-if [ -f "$POLICY_FILE" ]; then
-  SAFE_DELETE_PATHS=$(python3 -c "
-import sys
-try:
-    import yaml
-    with open(sys.argv[1]) as f:
-        policy = yaml.safe_load(f) or {}
-    paths = policy.get('safe_delete_paths', [])
-    print(' '.join(paths))
-except Exception:
-    print('')
-" "$POLICY_FILE" 2>/dev/null || echo "")
-fi
 
 # ============================================================================
 # TIER 1: BLOCKED - always denied, no user override
@@ -103,9 +125,9 @@ fi
 # Catastrophic operations that are never correct in a development context.
 # These are security-sensitive: we deny silently, never prompt.
 #
-# IMPORTANT: Blocked patterns are checked against the FULL command (all lines),
+# IMPORTANT: All security tiers check against the FULL command (all lines),
 # not just CMD_PREFIX. This prevents multiline bypass where a destructive
-# command is hidden on line 2+. Only ASK/WARN tiers use CMD_PREFIX.
+# command is hidden on line 2+. CMD_PREFIX is only used for safe pass-through.
 # ============================================================================
 BLOCKED_PATTERNS=(
   "rm\s+-rf\s+/( |$)"       # root filesystem only (anchored, whitespace-flexible)
@@ -123,6 +145,7 @@ BLOCKED_PATTERNS=(
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   if echo "$COMMAND" | grep -qE "$pattern"; then
     emit_decision "deny" "Blocked: catastrophic pattern — this is never allowed"
+    exit $?
   fi
 done
 
@@ -131,13 +154,22 @@ done
 # Placed AFTER blocked tier so catastrophic patterns are always caught, but
 # BEFORE ASK/WARN tiers to prevent false positives from heredoc content
 # (e.g., commit messages mentioning "rm" would otherwise trigger ASK).
+#
+# IMPORTANT: Only applies to SIMPLE commands. If the command contains chaining
+# operators (&&, ||, ;) after the git verb, it falls through to ASK/WARN tiers
+# so the chained portion is properly evaluated.
 # ============================================================================
 if echo "$CMD_PREFIX" | grep -qE '^git (add|commit|status|diff|log|branch|show|stash|tag|remote|fetch|symbolic-ref|rev-parse|config --get) '; then
-  exit 0
-fi
-# Chained git add && git commit patterns
-if echo "$CMD_PREFIX" | grep -qE '^git add .+&& *git commit'; then
-  exit 0
+  # Check for chaining operators in the full command — if present, don't fast-path
+  if ! echo "$COMMAND" | grep -qE '(&&|\|\||;)'; then
+    exit 0
+  fi
+  # Also allow "git add ... && git commit ..." as a known-safe compound pattern
+  if echo "$CMD_PREFIX" | grep -qE '^git add .+&& *git commit'; then
+    if ! echo "$COMMAND" | grep -qE '&&.*&&|;|\|\|'; then
+      exit 0
+    fi
+  fi
 fi
 
 # ============================================================================
@@ -148,11 +180,13 @@ fi
 # ============================================================================
 
 # File/directory deletion — check if it's a known safe-delete path first
-if echo "$CMD_PREFIX" | grep -qE '\brm\b'; then
-  # Check if rm target is a known safe path (downgrade to WARN)
+if echo "$COMMAND" | grep -qE '\brm\b'; then
+  # Extract the rm arguments (everything after rm and its flags) to check
+  # safe paths against the target, not the entire command string.
+  RM_ARGS=$(echo "$CMD_PREFIX" | sed -E 's/^.*\brm\b\s+(-[a-zA-Z]+\s+)*//')
   IS_SAFE_DELETE=false
   for safe_path in $SAFE_DELETE_PATHS; do
-    if echo "$CMD_PREFIX" | grep -qF "$safe_path"; then
+    if echo "$RM_ARGS" | grep -qF "$safe_path"; then
       IS_SAFE_DELETE=true
       break
     fi
@@ -160,19 +194,23 @@ if echo "$CMD_PREFIX" | grep -qE '\brm\b'; then
 
   if [ "$IS_SAFE_DELETE" = true ]; then
     emit_decision "allow" "Deleting known build artifact. Matched safe_delete_paths in security policy."
+    exit $?
   else
     emit_decision "ask" "File deletion requested: $CMD_PREFIX"
+    exit $?
   fi
 fi
 
 # Destructive git operations
-if echo "$CMD_PREFIX" | grep -qE 'git (push --force|reset --hard|clean -f|checkout \.|restore \.|branch -D)'; then
+if echo "$COMMAND" | grep -qE 'git (push --force|reset --hard|clean -f|checkout \.|restore \.|branch -D)'; then
   emit_decision "ask" "Destructive git operation: $CMD_PREFIX"
+  exit $?
 fi
 
 # Consequential git writes (push, rebase, merge)
-if echo "$CMD_PREFIX" | grep -qE 'git (push|rebase|merge|cherry-pick)'; then
+if echo "$COMMAND" | grep -qE 'git (push|rebase|merge|cherry-pick)'; then
   emit_decision "ask" "Git write operation requires confirmation: $CMD_PREFIX"
+  exit $?
 fi
 
 # ============================================================================
@@ -186,8 +224,9 @@ WARNING_PATTERNS=(
 )
 
 for pattern in "${WARNING_PATTERNS[@]}"; do
-  if echo "$CMD_PREFIX" | grep -qF "$pattern"; then
+  if echo "$COMMAND" | grep -qF "$pattern"; then
     emit_decision "allow" "Warning: '$pattern' has external side effects. Confirm user intent before proceeding."
+    exit $?
   fi
 done
 

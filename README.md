@@ -48,7 +48,10 @@ The system automatically adapts to your project structure.
 │   ├── session-init.sh        # SessionStart: env setup + state check
 │   ├── validate-bash.sh       # PreToolUse/Bash: 4-tier command validation
 │   ├── validate-read.sh       # PreToolUse/Read: secret file protection
-│   ├── track-file-changes.sh  # PostToolUse: log file modifications
+│   ├── validate-write.sh      # PreToolUse/Edit|Write: secret file protection
+│   ├── track-file-changes.sh  # PostToolUse/Edit|Write: log file modifications
+│   ├── notify-bash-success.sh # PostToolUse/Bash: silent acknowledgment
+│   ├── notify-bash-failure.sh # PostToolUseFailure/Bash: denial feedback
 │   ├── validate-subagent-output.sh  # SubagentStop: quality gate
 │   ├── pre-compact-save.sh    # PreCompact: save before context trim
 │   └── session-end.sh         # SessionEnd: log termination
@@ -57,6 +60,7 @@ The system automatically adapts to your project structure.
 ├── lib/                   # Shared Python library
 ├── skills/                # Slash command skills
 └── session/               # Runtime state (gitignored)
+CLAUDE.md                  # Root project context for Claude Code
 ```
 
 ## Integrity Checking
@@ -70,7 +74,7 @@ python3 .claude/lib/verify_integrity.py
 # Runs automatically on session startup via session-init.sh
 ```
 
-The checker validates: required hook registrations, absence of harmful deny rules, security tier ordering, script existence, and security policy presence. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
+The checker validates: settings schema, `disableBypassPermissionsMode`, deny/ask conflicts, required hook registrations (PreToolUse, PostToolUse, PreCompact, SessionStart), security tier ordering, script existence/permissions, security policy presence, SETTINGS_GUARD.md cross-reference, and MCP server settings. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
 
 ## Documentation
 

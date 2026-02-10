@@ -424,7 +424,8 @@ def main():
     log_parser = subparsers.add_parser('log', help='Log an event')
     log_parser.add_argument('--type', required=True,
                            choices=['task_created', 'task_started', 'task_completed',
-                                   'subagent', 'verification', 'file_modified'])
+                                   'subagent', 'verification', 'file_modified',
+                                   'session_ended', 'session_checkpoint'])
     log_parser.add_argument('--subject', help='Task subject')
     log_parser.add_argument('--task-id', help='Task ID')
     log_parser.add_argument('--role', help='Subagent role')
@@ -436,6 +437,10 @@ def main():
                            help='Verification type (default: test)')
     log_parser.add_argument('--details', help='Event details')
     log_parser.add_argument('--file', help='File path')
+    log_parser.add_argument('--agent-type',
+                           choices=['Explore', 'general-purpose', 'Bash', 'Plan'],
+                           default='Explore',
+                           help='Subagent type (default: Explore)')
 
     # conclude command
     subparsers.add_parser('conclude', help='Conclude session and archive')
@@ -459,17 +464,35 @@ def main():
 
     elif args.command == 'log':
         if args.type == 'task_created':
-            state.log_task_created(args.subject or '', args.task_id)
+            if not args.subject:
+                print("Error: --subject is required for task_created", file=sys.stderr)
+                sys.exit(1)
+            state.log_task_created(args.subject, args.task_id)
         elif args.type == 'task_started':
-            state.log_task_started(args.task_id or '', args.subject)
+            if not args.task_id:
+                print("Error: --task-id is required for task_started", file=sys.stderr)
+                sys.exit(1)
+            state.log_task_started(args.task_id, args.subject)
         elif args.type == 'task_completed':
             state.log_task_completed(args.task_id or '', args.subject)
         elif args.type == 'subagent':
-            state.log_subagent(args.role or '', 'Explore', args.model or 'sonnet', args.details or '')
+            if not args.role:
+                print("Error: --role is required for subagent", file=sys.stderr)
+                sys.exit(1)
+            state.log_subagent(args.role, args.agent_type, args.model or 'sonnet', args.details or '')
         elif args.type == 'verification':
             state.log_verification(args.verification_type, args.passed, args.details)
         elif args.type == 'file_modified':
-            state.log_file_modified(args.file or '')
+            if not args.file:
+                print("Error: --file is required for file_modified", file=sys.stderr)
+                sys.exit(1)
+            state.log_file_modified(args.file)
+        elif args.type == 'session_ended':
+            state._log_journal("session_ended", {"details": args.details or ''})
+            state._save()
+        elif args.type == 'session_checkpoint':
+            state._log_journal("session_checkpoint", {"details": args.details or ''})
+            state._save()
         print(f"Logged: {args.type}")
 
     elif args.command == 'conclude':

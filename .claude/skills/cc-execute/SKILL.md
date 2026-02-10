@@ -84,47 +84,6 @@ Maximum 2 adversarial rounds. If still challenged, ask user.
 - Summarize what was accomplished
 - List files modified
 
----
-
-## Session State Integration
-
-cc-execute writes to the execution journal so cc-conclude knows what was done.
-
-**Log significant actions using the session state CLI**:
-```bash
-# Log task creation
-python3 .claude/lib/session_state.py log --type task_created --subject "Fix config parsing bug" --task-id "1"
-
-# Log task start
-python3 .claude/lib/session_state.py log --type task_started --task-id "1"
-
-# Log subagent spawn
-python3 .claude/lib/session_state.py log --type subagent --role investigator --model sonnet --details "Find config issue"
-
-# Log verification result (test passed)
-python3 .claude/lib/session_state.py log --type verification --verification-type test --passed --details "18 tests passed"
-
-# Log verification result (lint failed)
-python3 .claude/lib/session_state.py log --type verification --verification-type lint --details "3 lint errors"
-
-# Log adversarial challenge result
-python3 .claude/lib/session_state.py log --type verification --verification-type adversarial --passed --details "ACCEPTED after round 2"
-
-# Log file modification
-python3 .claude/lib/session_state.py log --type file_modified --file "src/config.py"
-
-# View execution summary
-python3 .claude/lib/session_state.py summary
-```
-
-**Journal entry types**: task_created, task_started, task_completed, subagent_spawned, subagent_completed, verification, file_modified
-
-This enables cc-conclude to generate accurate commit messages and session summaries.
-
-**Note**: Logging is optional but recommended for complex sessions. The session state persists in `.claude/session/state.json`.
-
----
-
 ## Subagent Roles
 
 | Role | Type | Model | When to Use |
@@ -134,31 +93,6 @@ This enables cc-conclude to generate accurate commit messages and session summar
 | **Verifier** | general-purpose | Sonnet | Run tests, confirm changes |
 | **Adversary** | Explore | Sonnet | Challenge claims, find holes |
 | **Reasoner** | Explore | Opus | Complex analysis, design decisions |
-
----
-
-## Token Philosophy
-
-**Your context is precious. Subagent context is expendable.**
-
-| Approach | Tokens Used | Understanding |
-|----------|-------------|---------------|
-| Read 10 files directly | ~100K | Raw code, limited reasoning room |
-| 10 subagents report | ~5K | Synthesized findings, full reasoning room |
-
-Subagents read MORE (entire files), report LESS (500-1000 tokens each).
-
----
-
-## Anti-Patterns
-
-| Don't | Do Instead |
-|-------|------------|
-| Read large files directly | Spawn Explore subagent |
-| Assume file structure | Investigate first |
-| Implement without verifying | Always verify |
-| Use Haiku for reasoning | Use Sonnet or Opus |
-| Skip adversarial on big claims | Challenge before claiming complete |
 
 ---
 

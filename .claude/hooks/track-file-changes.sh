@@ -13,12 +13,18 @@ set -euo pipefail
 
 INPUT=$(cat)
 
-# Extract the file path from tool_input
-FILE_PATH=$(echo "$INPUT" | python3 -c "
+# Extract the file path from tool_input (skip if operation failed)
+FILE_PATH=$(printf '%s\n' "$INPUT" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 ti = data.get('tool_input', {})
-# Edit tool uses 'file_path', Write tool uses 'file_path'
+tr = data.get('tool_response', {})
+# Skip logging if the operation did not succeed
+if isinstance(tr, dict) and tr.get('success') is False:
+    sys.exit(0)
+if isinstance(tr, str) and 'error' in tr.lower():
+    sys.exit(0)
+# Edit and Write both use 'file_path'
 print(ti.get('file_path', ''))
 " 2>/dev/null || echo "")
 

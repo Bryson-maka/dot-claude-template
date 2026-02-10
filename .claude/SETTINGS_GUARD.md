@@ -13,17 +13,28 @@
 2. **Do NOT remove hook registrations.**
    Every hook in settings.json serves a specific purpose:
    - `PreToolUse/Bash` → `validate-bash.sh`: 4-tier security model
-   - `PreToolUse/Read` → `validate-read.sh`: Secret file protection
+   - `PreToolUse/Read` → `validate-read.sh`: Secret file protection (reads)
+   - `PreToolUse/Edit|Write` → `validate-write.sh`: Secret file protection (writes)
    - `PostToolUse/Edit|Write` → `track-file-changes.sh`: Change tracking
    - `PostToolUse/Bash` → `notify-bash-success.sh`: Silent command acknowledgment
    - `PostToolUseFailure/Bash` → `notify-bash-failure.sh`: Denial/failure feedback to agent
-   - `SessionStart` → `session-init.sh`: Environment setup
-   - `PreCompact` → `pre-compact-save.sh`: State preservation
+   - `SessionStart` → `session-init.sh`: Environment setup (fires on startup, resume, clear, compact)
+   - `PreCompact` → `pre-compact-save.sh`: State preservation before context trim
+   - `SubagentStop` → `validate-subagent-output.sh`: Quality gate for subagent responses
    - `SessionEnd` → `session-end.sh`: Session archival
 
 3. **Do NOT reorder tiers in `validate-bash.sh`.**
    Blocked patterns MUST be checked BEFORE safe pass-through. Wrong order allows
    bypass via chaining (e.g., `git add . && rm -rf /`).
+
+4. **Do NOT remove `disableBypassPermissionsMode`.**
+   This prevents `--dangerously-skip-permissions` from disabling the entire
+   security model. Must remain set to `"disable"`.
+
+5. **Do NOT create deny/ask conflicts.**
+   Deny rules take absolute precedence — if a pattern appears in both deny and ask,
+   the ask prompt will never fire. Keep destructive commands in ask only; reserve
+   deny for catastrophic-only patterns (e.g., `rm -rf /`).
 
 ## Integrity Check
 

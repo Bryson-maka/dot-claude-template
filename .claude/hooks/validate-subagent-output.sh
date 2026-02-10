@@ -40,8 +40,10 @@ fi
 VALIDATION=$(python3 -c "
 import json, sys
 
+transcript_path = sys.argv[1]
+
 try:
-    with open('$TRANSCRIPT_PATH') as f:
+    with open(transcript_path) as f:
         lines = f.readlines()
 
     # Find last assistant message
@@ -60,17 +62,33 @@ try:
         except json.JSONDecodeError:
             continue
 
-    word_count = len(last_assistant.split())
-    if word_count < 10:
+    stripped = last_assistant.strip()
+
+    # Check for empty or error-only responses
+    if not stripped:
+        print('empty')
+    elif stripped.lower().startswith('error') and len(stripped.split()) < 5:
+        print('error_only')
+    elif len(stripped.split()) < 5:
         print('too_short')
     else:
         print('ok')
 except Exception:
     print('ok')
-" 2>/dev/null || echo "ok")
+" "$TRANSCRIPT_PATH" 2>/dev/null || echo "ok")
+
+if [ "$VALIDATION" = "empty" ]; then
+  echo '{"decision": "block", "reason": "Subagent returned an empty response. Please provide a substantive answer."}'
+  exit 0
+fi
+
+if [ "$VALIDATION" = "error_only" ]; then
+  echo '{"decision": "block", "reason": "Subagent response appears to be only an error message. Please resolve the error and provide a substantive answer."}'
+  exit 0
+fi
 
 if [ "$VALIDATION" = "too_short" ]; then
-  echo '{"decision": "block", "reason": "Subagent response was too short (< 10 words). Please provide a more substantive analysis."}'
+  echo '{"decision": "block", "reason": "Subagent response was too short (< 5 words). Please provide a more substantive answer."}'
   exit 0
 fi
 

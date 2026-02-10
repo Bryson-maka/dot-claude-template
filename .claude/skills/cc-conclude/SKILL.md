@@ -4,13 +4,6 @@ description: Wrap up session with summary, README updates, and git commit workfl
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task
 argument-hint: [--commit | --no-readme]
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: prompt
-          prompt: "A Bash command is about to run during session conclusion: $ARGUMENTS. Allow git commands (status, diff, log, add, commit, push, tag), python scripts, file cleanup (rm, mv) that the user explicitly requested, and standard shell commands (ls, cat, echo). Block ONLY destructive git operations (reset --hard, rebase, force push, branch -D, clean -f) and system-level destructive commands (rm -rf /, chmod -R 777). When in doubt, allow — the global validate-bash.sh hook handles security tiers. Respond with {\"ok\": true} or {\"ok\": false, \"reason\": \"explanation\"}."
-          timeout: 15
 ---
 
 # Session Conclusion
@@ -105,32 +98,3 @@ If the git state above shows README triggers detected:
 - Shows exactly what will be committed
 - Allows message editing before commit
 
----
-
-## Session State Integration
-
-After committing, mark the session as concluded:
-```bash
-python3 .claude/skills/cc-conclude/analyze_changes.py --conclude
-```
-
-This:
-- Sets `concluded_at` timestamp in `.claude/session/state.json`
-- Archives the full session state to `.claude/session/history.jsonl`
-- Enables the next `/cc-prime-cw` to start fresh
-
-**View session history**:
-```bash
-cat .claude/session/history.jsonl | jq -s '.'
-```
-
----
-
-## Configuration
-
-Edit `workflow.yaml` to customize:
-- README trigger patterns
-- Commit types
-- Phase behavior
-
-Check current config: `python .claude/skills/cc-conclude/analyze_changes.py --config`

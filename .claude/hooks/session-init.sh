@@ -2,7 +2,7 @@
 # SessionStart hook: Initialize session environment
 #
 # Hook protocol (SessionStart):
-#   - Receives JSON on stdin: { "source": "startup"|"resume"|"clear"|"compact", ... }
+#   - Receives JSON on stdin: { "source": "startup"|"resume"|"clear", ... }
 #   - Cannot block (informational only)
 #   - Can write env vars to $CLAUDE_ENV_FILE (SessionStart exclusive feature)
 #   - additionalContext in stdout is shown to Claude
@@ -47,7 +47,7 @@ if not data.get('passed', True):
     msg += 'Run python3 .claude/lib/verify_integrity.py for details. '
     msg += 'Read .claude/SETTINGS_GUARD.md before modifying settings.json. '
     msg += 'Issues: ' + '; '.join(warnings)
-    print(json.dumps({'additionalContext': msg}))
+    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': msg}}))
 " 2>/dev/null || true
     fi
   fi
@@ -55,14 +55,14 @@ if not data.get('passed', True):
   if [ -f "$STATE_FILE" ]; then
     # Check if state is from a previous session that wasn't concluded
     CONCLUDED=$(python3 -c "
-import json
-with open('$STATE_FILE') as f:
+import sys, json
+with open(sys.argv[1]) as f:
     state = json.load(f)
 print(state.get('concluded_at', 'null'))
-" 2>/dev/null || echo "error")
+" "$STATE_FILE" 2>/dev/null || echo "error")
 
     if [ "$CONCLUDED" = "null" ] && [ "$CONCLUDED" != "error" ]; then
-      echo "{\"additionalContext\": \"Previous session was not concluded. Run /cc-conclude to archive it, or /cc-prime-cw to start fresh.\"}"
+      echo '{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "Previous session was not concluded. Run /cc-conclude to archive it, or /cc-prime-cw to start fresh."}}'
     fi
   fi
 fi
@@ -70,7 +70,7 @@ fi
 # On resume, confirm state is intact
 if [ "$SOURCE" = "resume" ]; then
   if [ ! -f "$STATE_FILE" ]; then
-    echo "{\"additionalContext\": \"No session state found. Run /cc-prime-cw to initialize.\"}"
+    echo '{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "No session state found. Run /cc-prime-cw to initialize."}}'
   fi
 fi
 
