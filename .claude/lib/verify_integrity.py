@@ -129,11 +129,24 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
     )
     if not has_write_hook:
         warnings.append(
-            "DRIFT: PreToolUse hook for 'Edit|Write' (validate-write.sh) is missing. "
-            "Secret files are unprotected from writes."
+            "DRIFT: PreToolUse hook for 'Edit|Write|NotebookEdit' (validate-write.sh) "
+            "is missing. Secret files are unprotected from writes."
         )
+    else:
+        # Verify NotebookEdit is included in the write matcher
+        has_notebook = any(
+            'NotebookEdit' in entry.get('matcher', '')
+            for entry in pre_tool_use
+            if 'Edit' in entry.get('matcher', '') or 'Write' in entry.get('matcher', '')
+        )
+        if not has_notebook:
+            warnings.append(
+                "DRIFT: PreToolUse write hook matcher does not include 'NotebookEdit'. "
+                "Notebook edits bypass secret file protection and directory restrictions. "
+                "Update matcher to 'Edit|Write|NotebookEdit'."
+            )
 
-    # 6b: PostToolUse must have Edit|Write matcher
+    # 6b: PostToolUse must have Edit|Write|NotebookEdit matcher
     post_tool_use = hooks.get('PostToolUse', [])
     has_edit_write = any(
         'Edit' in entry.get('matcher', '') or 'Write' in entry.get('matcher', '')
@@ -141,9 +154,20 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
     )
     if not has_edit_write:
         warnings.append(
-            "DRIFT: PostToolUse hook for 'Edit|Write' (track-file-changes.sh) is missing. "
-            "File modification tracking is disabled."
+            "DRIFT: PostToolUse hook for 'Edit|Write|NotebookEdit' "
+            "(track-file-changes.sh) is missing. File modification tracking is disabled."
         )
+    else:
+        has_notebook_post = any(
+            'NotebookEdit' in entry.get('matcher', '')
+            for entry in post_tool_use
+            if 'Edit' in entry.get('matcher', '') or 'Write' in entry.get('matcher', '')
+        )
+        if not has_notebook_post:
+            warnings.append(
+                "DRIFT: PostToolUse write tracker matcher does not include 'NotebookEdit'. "
+                "Notebook edits won't be tracked in the session file change log."
+            )
 
     # 6c: PostToolUseFailure must have Bash matcher
     post_fail = hooks.get('PostToolUseFailure', [])
@@ -238,6 +262,34 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                     warnings.append(
                         "INVALID: security-policy.yaml 'secret_files' contains non-string entries."
                     )
+
+            # Validate allowed_write_directories if present
+            awd = policy.get('allowed_write_directories')
+            if awd is not None:
+                if not isinstance(awd, list):
+                    warnings.append(
+                        "INVALID: security-policy.yaml 'allowed_write_directories' must be a list. "
+                        "Directory-scoped write restrictions will be disabled."
+                    )
+                elif awd:  # Non-empty list
+                    for entry in awd:
+                        if not isinstance(entry, str):
+                            warnings.append(
+                                "INVALID: security-policy.yaml 'allowed_write_directories' "
+                                "contains non-string entries."
+                            )
+                            break
+                        if '..' in entry:
+                            warnings.append(
+                                f"SUSPICIOUS: allowed_write_directories entry '{entry}' "
+                                "contains '..'. Use clean relative paths from project root."
+                            )
+                        if entry.startswith('/'):
+                            warnings.append(
+                                f"PORTABILITY: allowed_write_directories entry '{entry}' "
+                                "is absolute. Prefer relative paths for portability "
+                                "across machines and CI environments."
+                            )
         except ImportError:
             warnings.append(
                 "MISSING: PyYAML is not installed. security-policy.yaml structural "
@@ -273,7 +325,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
 
     # Check 10: Required lib scripts exist
     CHECKS_RUN += 1
-    required_libs = ['session_state.py', 'project_analyzer.py']
+    required_libs = ['session_state.py', 'project_analyzer.py', 'path_validator.py']
     for lib_name in required_libs:
         lib_path = claude_dir / 'lib' / lib_name
         if not lib_path.exists():

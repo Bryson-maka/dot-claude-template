@@ -30,3 +30,34 @@ secret_files: []
   # - "firebase-admin.*\\.json"
   # - "gcp-credentials\\.json"
   # - "\\.secrets$"
+
+# Directory-scoped write restrictions (opt-in).
+# When configured, Edit/Write/NotebookEdit and Bash file-writing commands
+# are denied if the target path falls outside these directories.
+# Reads are NOT restricted — only writes.
+#
+# Paths are relative to the project root. Symlinks are resolved before
+# checking, preventing traversal attacks.
+#
+# To enable: uncomment and list your writable directories.
+# To disable: leave as empty list [] or remove the key entirely.
+#
+# Example for a Python project:
+#   allowed_write_directories:
+#     - src
+#     - tests
+#     - docs
+#     - .claude/session
+#
+# Example for a Node project:
+#   allowed_write_directories:
+#     - src
+#     - tests
+#     - docs
+#     - node_modules
+#     - .claude/session
+#
+# Absolute paths are also supported but discouraged for portability.
+# The .claude/ directory itself is always protected by other hooks
+# (settings.json and security-policy.yaml writes are hard-denied).
+allowed_write_directories: []

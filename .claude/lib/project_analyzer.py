@@ -667,12 +667,41 @@ def write_project_config(analysis: ProjectAnalysis, output_path: Path) -> None:
     except ImportError:
         HAS_YAML = False
 
+    # Generate suggested allowed_write_directories based on detected structure.
+    # Include source/test/doc directories and framework-specific build outputs.
+    write_dirs = []
+    for d in analysis.directories:
+        if d.purpose in ('source', 'test', 'docs', 'scripts'):
+            write_dirs.append(d.path)
+    # Framework-specific build artifact directories
+    fw_names = {fw.name for fw in analysis.frameworks if fw.confidence >= 0.5}
+    if fw_names & {'node', 'react', 'nextjs', 'vue', 'angular', 'svelte'}:
+        write_dirs.extend(['node_modules', 'dist', 'build', '.next'])
+    if fw_names & {'cargo', 'rust'}:
+        write_dirs.append('target')
+    if fw_names & {'python', 'django', 'flask', 'fastapi', 'pytest'}:
+        write_dirs.extend(['__pycache__', '.pytest_cache', '.mypy_cache'])
+    if fw_names & {'go'}:
+        write_dirs.append('bin')
+    if fw_names & {'java', 'gradle', 'maven'}:
+        write_dirs.extend(['target', 'build'])
+    # Always include session state directory
+    write_dirs.append('.claude/session')
+    # Deduplicate while preserving order
+    seen: set = set()
+    unique_write_dirs = []
+    for d in write_dirs:
+        if d not in seen:
+            seen.add(d)
+            unique_write_dirs.append(d)
+
     config = {
         'generated_by': 'project_analyzer.py',
         'project_languages': list(analysis.languages.keys())[:5],
         'project_frameworks': [fw.name for fw in analysis.frameworks if fw.confidence >= 0.5],
         'domains': [asdict(d) for d in analysis.domain_suggestions],
         'commands': analysis.command_suggestions,
+        'suggested_write_directories': unique_write_dirs,
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

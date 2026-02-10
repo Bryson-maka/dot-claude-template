@@ -46,10 +46,10 @@ The system automatically adapts to your project structure.
 ├── security-policy.yaml   # Project-specific security tier overrides
 ├── hooks/                 # Lifecycle hook scripts
 │   ├── session-init.sh        # SessionStart: env setup + state check
-│   ├── validate-bash.sh       # PreToolUse/Bash: 4-tier command validation
+│   ├── validate-bash.sh       # PreToolUse/Bash: 4-tier command validation + directory scope
 │   ├── validate-read.sh       # PreToolUse/Read: secret file protection
-│   ├── validate-write.sh      # PreToolUse/Edit|Write: secret file protection
-│   ├── track-file-changes.sh  # PostToolUse/Edit|Write: log file modifications
+│   ├── validate-write.sh      # PreToolUse/Edit|Write|NotebookEdit: secret + directory scope
+│   ├── track-file-changes.sh  # PostToolUse/Edit|Write|NotebookEdit: log file modifications
 │   ├── notify-bash-success.sh # PostToolUse/Bash: silent acknowledgment
 │   ├── notify-bash-failure.sh # PostToolUseFailure/Bash: denial feedback
 │   ├── validate-subagent-output.sh  # SubagentStop: quality gate
@@ -74,7 +74,25 @@ python3 .claude/lib/verify_integrity.py
 # Runs automatically on session startup via session-init.sh
 ```
 
-The checker validates: settings schema, `disableBypassPermissionsMode`, deny/ask conflicts, required hook registrations (PreToolUse, PostToolUse, PreCompact, SessionStart), security tier ordering, script existence/permissions, security policy presence, SETTINGS_GUARD.md cross-reference, and MCP server settings. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
+The checker validates: settings schema, `disableBypassPermissionsMode`, deny/ask conflicts, required hook registrations (PreToolUse with NotebookEdit, PostToolUse, PreCompact, SessionStart), security tier ordering, script existence/permissions, security policy presence (including `allowed_write_directories` schema), SETTINGS_GUARD.md cross-reference, and MCP server settings. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
+
+## Directory-Scoped Write Restrictions
+
+Optionally restrict which directories Claude Code can write to. When enabled, Edit, Write, NotebookEdit, and Bash file-writing commands are denied if the target path falls outside the allowed list. Reads are never restricted.
+
+Configure in `.claude/security-policy.yaml`:
+
+```yaml
+allowed_write_directories:
+  - src
+  - tests
+  - docs
+  - .claude/session
+```
+
+Paths are relative to the project root. Symlinks are resolved before checking. The feature is **opt-in** — leave as `[]` or omit the key to disable. Run `/cc-learn` to auto-detect sensible defaults for your project type.
+
+This is defense-in-depth layered on top of the 4-tier security model. Bash commands that can't be statically analyzed for write targets escalate to the ASK tier for user review.
 
 ## Documentation
 

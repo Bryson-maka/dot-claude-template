@@ -6,11 +6,13 @@ Shared Python modules used by Claude Code skills.
 Modules:
     session_state: Session state management (priming, journal, archival)
     project_analyzer: Project analysis and configuration discovery
+    path_validator: Directory-scoped write restriction utilities
 
 Usage:
     from lib import get_project_root, LIB_ROOT, CLAUDE_ROOT
     from lib.session_state import SessionState
     from lib.project_analyzer import analyze_project
+    from lib.path_validator import check_write_path, check_bash_write_paths
 """
 
 from __future__ import annotations

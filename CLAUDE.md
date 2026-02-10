@@ -19,10 +19,11 @@ Portable `.claude/` template providing skills, hooks, and session management for
 
 ## Security Model
 
-4-tier hook-based validation (BLOCKED → ASK → WARN → ALLOW) layered on top of native permissions.
-- `security-policy.yaml` — project-specific tier overrides and safe paths
-- `validate-bash.sh` — command validation on every Bash call
-- `validate-read.sh` / `validate-write.sh` — secret file protection for reads AND writes
+4-tier hook-based validation (BLOCKED → ASK → WARN → ALLOW) layered on top of native permissions, plus opt-in directory-scoped write restrictions.
+- `security-policy.yaml` — project-specific tier overrides, safe paths, and `allowed_write_directories`
+- `validate-bash.sh` — command validation on every Bash call + directory scope for write commands
+- `validate-read.sh` / `validate-write.sh` — secret file protection for reads AND writes (Edit/Write/NotebookEdit)
+- `path_validator.py` — shared library for symlink-safe path resolution and directory matching
 - Bypass mode is disabled via `disableBypassPermissionsMode`
 
 ## Project Structure

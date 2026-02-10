@@ -12,10 +12,10 @@
 
 2. **Do NOT remove hook registrations.**
    Every hook in settings.json serves a specific purpose:
-   - `PreToolUse/Bash` → `validate-bash.sh`: 4-tier security model
+   - `PreToolUse/Bash` → `validate-bash.sh`: 4-tier security model + directory scope
    - `PreToolUse/Read` → `validate-read.sh`: Secret file protection (reads)
-   - `PreToolUse/Edit|Write` → `validate-write.sh`: Secret file protection (writes)
-   - `PostToolUse/Edit|Write` → `track-file-changes.sh`: Change tracking
+   - `PreToolUse/Edit|Write|NotebookEdit` → `validate-write.sh`: Secret file + directory scope (writes)
+   - `PostToolUse/Edit|Write|NotebookEdit` → `track-file-changes.sh`: Change tracking
    - `PostToolUse/Bash` → `notify-bash-success.sh`: Silent command acknowledgment
    - `PostToolUseFailure/Bash` → `notify-bash-failure.sh`: Denial/failure feedback to agent
    - `SessionStart` → `session-init.sh`: Environment setup (fires on startup, resume, clear, compact)
@@ -35,6 +35,11 @@
    Deny rules take absolute precedence — if a pattern appears in both deny and ask,
    the ask prompt will never fire. Keep destructive commands in ask only; reserve
    deny for catastrophic-only patterns (e.g., `rm -rf /`).
+
+6. **Do NOT remove NotebookEdit from write hook matchers.**
+   The `Edit|Write|NotebookEdit` matcher ensures notebook edits go through the same
+   secret file protection and directory-scoped write restrictions as regular edits.
+   Removing it creates an unguarded write vector.
 
 ## Integrity Check
 

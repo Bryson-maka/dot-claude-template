@@ -12,14 +12,15 @@
 #         "permissionDecisionReason": "explanation"
 #     }}
 #
-# Four security tiers:
+# Five security layers:
 #   1. BLOCKED - always denied (catastrophic/irreversible system-level ops)
 #   2. ASK     - user prompted for confirmation (destructive but legitimate dev ops)
 #              NOTE: permissionDecisionReason is shown to the USER, not Claude.
 #              We emit additionalContext alongside "ask" so Claude knows what was
 #              flagged regardless of whether the user accepts or denies.
 #   3. WARN    - allowed with context warning to Claude (side-effect commands)
-#   4. ALLOW   - silent pass-through (everything else)
+#   4. DIRECTORY SCOPE - deny writes outside allowed directories (opt-in)
+#   5. ALLOW   - silent pass-through (everything else)
 #
 # Customize tiers via .claude/security-policy.yaml (see template for format).
 
@@ -32,6 +33,7 @@ INPUT=$(cat)
 # to reduce subprocess overhead.
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 POLICY_FILE="$PROJECT_DIR/.claude/security-policy.yaml"
+LIB_DIR="$PROJECT_DIR/.claude/lib"
 
 PARSED=$(python3 -c "
 import json, sys, os
@@ -234,6 +236,49 @@ if echo "$COMMAND" | grep -qE 'git (push|rebase|merge|cherry-pick)'; then
   exit $?
 fi
 
+# Interpreter one-liners that can write to arbitrary files — static path
+# extraction is impossible, so escalate to ASK for user review.
+if echo "$COMMAND" | grep -qE '\bpython[23]?\s+-c\b'; then
+  emit_decision "ask" "Inline Python script may write files: $CMD_PREFIX"
+  exit $?
+fi
+if echo "$COMMAND" | grep -qE '\bnode\s+-e\b'; then
+  emit_decision "ask" "Inline Node script may write files: $CMD_PREFIX"
+  exit $?
+fi
+if echo "$COMMAND" | grep -qE '\bruby\s+-e\b'; then
+  emit_decision "ask" "Inline Ruby script may write files: $CMD_PREFIX"
+  exit $?
+fi
+if echo "$COMMAND" | grep -qE '\bperl\s+-e\b'; then
+  emit_decision "ask" "Inline Perl script may write files: $CMD_PREFIX"
+  exit $?
+fi
+
+# Archive/patch operations that write to directories specified by flags
+if echo "$COMMAND" | grep -qE '\btar\s+.*(-C\b|--directory\b)'; then
+  emit_decision "ask" "Archive extraction to specified directory: $CMD_PREFIX"
+  exit $?
+fi
+if echo "$COMMAND" | grep -qE '\bunzip\s+.*-d\b'; then
+  emit_decision "ask" "Archive extraction to specified directory: $CMD_PREFIX"
+  exit $?
+fi
+if echo "$COMMAND" | grep -qE '\brsync\b'; then
+  emit_decision "ask" "File sync operation: $CMD_PREFIX"
+  exit $?
+fi
+if echo "$COMMAND" | grep -qE '\bpatch\b'; then
+  emit_decision "ask" "Patch application may modify files: $CMD_PREFIX"
+  exit $?
+fi
+
+# eval with dynamic content — cannot statically analyze what it executes
+if echo "$COMMAND" | grep -qE '\beval\s'; then
+  emit_decision "ask" "Dynamic eval may execute arbitrary commands: $CMD_PREFIX"
+  exit $?
+fi
+
 # ============================================================================
 # TIER 3: WARN - allowed but Claude receives context
 # Commands with side effects that should proceed but Claude should be aware of.
@@ -250,6 +295,63 @@ for pattern in "${WARNING_PATTERNS[@]}"; do
     exit $?
   fi
 done
+
+# ============================================================================
+# DIRECTORY SCOPE: Deny bash writes outside allowed directories (opt-in)
+#
+# Uses path_validator.py to extract write target paths from the command and
+# check each against allowed_write_directories from security-policy.yaml.
+# Feature is disabled when allowed_write_directories is empty or missing.
+#
+# This is defense-in-depth: ~60% of real-world bash write commands have
+# extractable paths. Commands with unparseable write indicators (interpreter
+# one-liners, archive extraction, etc.) are already caught by ASK-tier
+# patterns above. This layer catches the remainder: redirects (> >>),
+# cp, mv, tee, mkdir, touch, curl -o, wget -O, etc.
+# ============================================================================
+if [ -f "$LIB_DIR/path_validator.py" ]; then
+  DIR_CHECK=$(python3 "$LIB_DIR/path_validator.py" check-bash "$COMMAND" "$PROJECT_DIR" 2>/dev/null || echo '{"allowed":true,"feature_enabled":false}')
+
+  # Parse result — only act if feature is enabled
+  DIR_RESULT=$(echo "$DIR_CHECK" | python3 -c "
+import sys, json
+try:
+    r = json.load(sys.stdin)
+    if not r.get('feature_enabled', False):
+        print('disabled')
+    elif not r.get('allowed', True):
+        denied = ', '.join(r.get('denied_paths', []))
+        print('denied:' + denied)
+    elif r.get('has_unparseable_writes', False):
+        reasons = ', '.join(r.get('unparseable_reasons', []))
+        print('unparseable:' + reasons)
+    else:
+        print('allowed')
+except Exception:
+    print('disabled')
+" 2>/dev/null || echo "disabled")
+
+  case "$DIR_RESULT" in
+    disabled)
+      # Feature not enabled — fall through to ALLOW
+      ;;
+    denied:*)
+      DENIED_PATHS="${DIR_RESULT#denied:}"
+      emit_decision "deny" "Directory restriction: write targets outside allowed directories — $DENIED_PATHS"
+      exit $?
+      ;;
+    unparseable:*)
+      # Command has write indicators we can't extract paths from.
+      # The major unparseable patterns (interpreter -c/-e, tar -C, eval, etc.)
+      # are already caught by ASK tier above, so this catches edge cases only.
+      emit_decision "ask" "Command may write to files outside allowed directories (could not extract all paths)"
+      exit $?
+      ;;
+    allowed)
+      # All extracted paths within allowed directories — fall through
+      ;;
+  esac
+fi
 
 # ============================================================================
 # TIER 4: ALLOW - pass through silently
