@@ -41,6 +41,10 @@
    secret file protection and directory-scoped write restrictions as regular edits.
    Removing it creates an unguarded write vector.
 
+7. **Do NOT remove `statusLine` without replacement.**
+   The template status line provides live context-window/cost/workflow telemetry.
+   Keep `statusLine.type` as `command` and point it to `.claude/status_lines/`.
+
 ## Integrity Check
 
 Run `python3 .claude/lib/verify_integrity.py` to validate the `.claude/` directory

@@ -105,11 +105,54 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                     "Deny takes absolute precedence — the ask prompt will never fire."
                 )
 
-    # Check 6: Required hook registrations exist
+    # Check 6: statusLine command exists and points to .claude/status_lines
+    CHECKS_RUN += 1
+    status_line = settings.get('statusLine')
+    if not isinstance(status_line, dict):
+        warnings.append(
+            "DRIFT: statusLine configuration is missing from settings.json. "
+            "Template telemetry (context usage, workflow phase, cost) is disabled."
+        )
+    else:
+        if status_line.get('type') != 'command':
+            warnings.append(
+                "INVALID: statusLine.type should be 'command'. "
+                "Claude Code status lines are command-based."
+            )
+
+        status_command = status_line.get('command')
+        if not isinstance(status_command, str) or '.claude/status_lines/' not in status_command:
+            warnings.append(
+                "DRIFT: statusLine.command should reference a script in .claude/status_lines/. "
+                "Template defaults expect .claude/status_lines/status_line.py."
+            )
+        else:
+            resolved_cmd = status_command.replace('"$CLAUDE_PROJECT_DIR"', str(base_dir))
+            resolved_cmd = resolved_cmd.replace('$CLAUDE_PROJECT_DIR', str(base_dir))
+            script_match = re.search(
+                r'([^\s"]+\.claude/status_lines/[^\s"]+\.py)',
+                resolved_cmd,
+            )
+            if script_match:
+                script_path = Path(script_match.group(1)).expanduser()
+                if not script_path.is_absolute():
+                    script_path = (base_dir / script_path).resolve()
+                if not script_path.exists():
+                    warnings.append(
+                        f"MISSING: statusLine script referenced in settings.json does not exist: {script_path}"
+                    )
+
+        padding = status_line.get('padding')
+        if padding is not None and not isinstance(padding, (int, float)):
+            warnings.append(
+                "INVALID: statusLine.padding must be numeric when present."
+            )
+
+    # Check 7: Required hook registrations exist
     CHECKS_RUN += 1
     hooks = settings.get('hooks', {})
 
-    # 6a: PreToolUse must have Bash, Read, and Edit|Write matchers
+    # 7a: PreToolUse must have Bash, Read, and Edit|Write matchers
     pre_tool_use = hooks.get('PreToolUse', [])
     pre_matchers = {entry.get('matcher', '') for entry in pre_tool_use}
 
@@ -146,7 +189,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                 "Update matcher to 'Edit|Write|NotebookEdit'."
             )
 
-    # 6b: PostToolUse must have Edit|Write|NotebookEdit matcher
+    # 7b: PostToolUse must have Edit|Write|NotebookEdit matcher
     post_tool_use = hooks.get('PostToolUse', [])
     has_edit_write = any(
         'Edit' in entry.get('matcher', '') or 'Write' in entry.get('matcher', '')
@@ -169,7 +212,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                 "Notebook edits won't be tracked in the session file change log."
             )
 
-    # 6c: PostToolUseFailure must have Bash matcher
+    # 7c: PostToolUseFailure must have Bash matcher
     post_fail = hooks.get('PostToolUseFailure', [])
     has_bash_fail = any(
         'Bash' in entry.get('matcher', '')
@@ -181,7 +224,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
             "Agent won't receive feedback when users deny ASK-tier commands."
         )
 
-    # 6d: SessionStart hook with compact matcher
+    # 7d: SessionStart hook with compact matcher
     session_start = hooks.get('SessionStart', [])
     if not session_start:
         warnings.append("DRIFT: SessionStart hook (session-init.sh) is missing.")
@@ -193,14 +236,14 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                 "Environment variables and context will be lost after compaction."
             )
 
-    # 6e: PreCompact hook
+    # 7e: PreCompact hook
     if not hooks.get('PreCompact'):
         warnings.append(
             "DRIFT: PreCompact hook (pre-compact-save.sh) is missing. "
             "Session state won't be preserved before context trimming."
         )
 
-    # Check 7: All referenced hook scripts exist and are executable
+    # Check 8: All referenced hook scripts exist and are executable
     CHECKS_RUN += 1
     for event_name, event_hooks in hooks.items():
         for entry in event_hooks:
@@ -222,7 +265,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                             f"Run: chmod +x {script_path}"
                         )
 
-    # Check 8: security-policy.yaml exists and has valid structure
+    # Check 9: security-policy.yaml exists and has valid structure
     CHECKS_RUN += 1
     policy_path = claude_dir / 'security-policy.yaml'
     if not policy_path.exists():
@@ -303,7 +346,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
                 "Hook scripts will fall back to defaults."
             )
 
-    # Check 9: validate-bash.sh tier ordering (blocked before safe)
+    # Check 10: validate-bash.sh tier ordering (blocked before safe)
     CHECKS_RUN += 1
     bash_hook = claude_dir / 'hooks' / 'validate-bash.sh'
     if bash_hook.exists():
@@ -323,7 +366,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
         except IOError:
             pass
 
-    # Check 10: Required lib scripts exist
+    # Check 11: Required lib scripts exist
     CHECKS_RUN += 1
     required_libs = ['session_state.py', 'project_analyzer.py', 'path_validator.py']
     for lib_name in required_libs:
@@ -331,7 +374,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
         if not lib_path.exists():
             warnings.append(f"MISSING: .claude/lib/{lib_name}")
 
-    # Check 11: Cross-reference SETTINGS_GUARD.md hook list against actual settings.json
+    # Check 12: Cross-reference SETTINGS_GUARD.md hook list against actual settings.json
     CHECKS_RUN += 1
     guard_path = claude_dir / 'SETTINGS_GUARD.md'
     if guard_path.exists():
@@ -367,7 +410,7 @@ def verify_integrity(base_dir: Path | None = None) -> list[str]:
         except IOError:
             pass
 
-    # Check 12: enableAllProjectMcpServers should be false for security
+    # Check 13: enableAllProjectMcpServers should be false for security
     CHECKS_RUN += 1
     if settings.get('enableAllProjectMcpServers') is not False:
         # Only warn if the key is present and set to true, or missing entirely

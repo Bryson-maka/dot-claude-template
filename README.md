@@ -9,6 +9,7 @@ This repository provides a structured skill system for Claude Code that demonstr
 - **Skills** - Slash commands (`/cc-prime-cw`, `/cc-execute`, `/cc-conclude`, `/cc-learn`) that orchestrate multi-agent workflows
 - **Hooks** - Lifecycle event handlers for security validation, change tracking, and state preservation
 - **Session Management** - Persistent state tracking across your coding session
+- **Status Line Telemetry** - Command-driven status line with context usage, cost, and workflow state
 - **Adaptive Configuration** - Auto-detection of project languages, frameworks, and patterns
 
 ## Quick Start
@@ -58,6 +59,8 @@ The system automatically adapts to your project structure.
 ├── TEMPLATE_VERSION       # Template version for drift detection
 ├── SETTINGS_GUARD.md      # Rules for modifying settings.json
 ├── lib/                   # Shared Python library
+├── status_lines/          # Claude Code status line scripts
+│   └── status_line.py         # Model, context bar, cost, cwd
 ├── skills/                # Slash command skills
 └── session/               # Runtime state (gitignored)
 CLAUDE.md                  # Root project context for Claude Code
@@ -74,7 +77,15 @@ python3 .claude/lib/verify_integrity.py
 # Runs automatically on session startup via session-init.sh
 ```
 
-The checker validates: settings schema, `disableBypassPermissionsMode`, deny/ask conflicts, required hook registrations (PreToolUse with NotebookEdit, PostToolUse, PreCompact, SessionStart), security tier ordering, script existence/permissions, security policy presence (including `allowed_write_directories` schema), SETTINGS_GUARD.md cross-reference, and MCP server settings. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
+The checker validates: settings schema, status line wiring, `disableBypassPermissionsMode`, deny/ask conflicts, required hook registrations (PreToolUse with NotebookEdit, PostToolUse, PreCompact, SessionStart), security tier ordering, script existence/permissions, security policy presence (including `allowed_write_directories` schema), SETTINGS_GUARD.md cross-reference, and MCP server settings. See [SETTINGS_GUARD.md](.claude/SETTINGS_GUARD.md) for the rules enforced.
+
+## Status Line
+
+The template ships with a command-based Claude Code status line in `.claude/settings.json`:
+
+- Script: `.claude/status_lines/status_line.py`
+- Shows: model name, context window bar with percentage and tokens remaining, session cost, current working directory
+- Colors shift from green to yellow to red to magenta as context usage climbs
 
 ## Directory-Scoped Write Restrictions
 

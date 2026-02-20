@@ -16,6 +16,7 @@ Portable `.claude/` template providing skills, hooks, and session management for
 - **Your context is precious, subagent context is expendable** — Subagents read 50-100K tokens internally, report back <=1000 tokens each
 - **Hooks are deterministic, instructions are advisory** — Security enforcement lives in hooks, not prompts
 - **Native permissions are the safety net, hooks add nuance** — settings.json deny/ask/allow catches basics; hooks handle complex logic like safe_delete_paths downgrades
+- **Status line is real-time telemetry** — Keep context/cost/workflow visibility concise and cheap to compute
 
 ## Security Model
 
@@ -31,7 +32,13 @@ Portable `.claude/` template providing skills, hooks, and session management for
 - `.claude/hooks/` — Lifecycle hook scripts (security, tracking, session management)
 - `.claude/skills/` — Slash command skills with YAML frontmatter
 - `.claude/lib/` — Shared Python library (session_state.py, project_analyzer.py, verify_integrity.py)
+- `.claude/status_lines/` — Status line renderers for Claude Code (`status_line.py`)
 - `.claude/session/` — Runtime state (gitignored)
+
+## Status Line
+
+- Configured via `.claude/settings.json` `statusLine` command
+- Shows: model, context window bar with % and tokens remaining, session cost, cwd
 
 ## Development
 
