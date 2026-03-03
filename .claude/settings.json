@@ -8,6 +8,7 @@
       "Bash(python3 .claude/lib/verify_integrity.py *)",
       "Bash(python3 .claude/lib/session_state.py *)",
       "Bash(python3 .claude/lib/project_analyzer.py *)",
+      "Bash(python3 .claude/lib/git_context.py *)",
       "Bash(python3 .claude/skills/cc-learn/learn.py *)",
       "Bash(uv run --with pyyaml python3 .claude/skills/cc-prime-cw/discover.py *)",
       "Bash(uv run --with pyyaml python3 .claude/skills/cc-execute/discover.py *)",

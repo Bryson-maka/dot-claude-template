@@ -55,6 +55,8 @@ The analysis output above includes session context from `.claude/session/state.j
 - `session.subagents_spawned`: Count of subagents used
 - `session.verifications`: Test/lint/adversarial results
 - `session.files_modified_by_session`: Files modified during execution
+- `session.teams`: Agent teams created during execution (v1.1+)
+- `session.adversary_verdicts`: Adversarial challenge results per team
 
 **To view detailed session state**:
 ```bash
@@ -66,6 +68,8 @@ Generate session summary using this data:
 - **Status**: COMPLETED, IN_PROGRESS, or BLOCKED
 - **Tasks**: From execution_journal task_completed entries
 - **Subagents**: Count and roles from subagents list
+- **Teams**: If `session.teams` has entries, summarize team count, member composition, and roles
+- **Adversarial Challenges**: If `session.adversary_verdicts` has entries, include verdict (ACCEPTED/CHALLENGED) and key findings for each
 - **Verification**: Test results and adversarial challenge outcomes
 - **Files Changed**: From git diff + files_modified list
 - **Open Items**: Incomplete work or follow-ups
@@ -111,6 +115,27 @@ Write `.claude/handoff/active.md` using this template. Fill each section from gi
 
 - {Insights, patterns, or findings from this session}
 - {Only include if something was actually discovered}
+
+## Team Composition
+
+{Include this section only if session.teams has entries, otherwise omit entirely}
+
+| Agent | Type | Model | Responsibility |
+|-------|------|-------|---------------|
+| {name} | {type} | {model} | {inferred from agent name/role} |
+
+{List agents from each team in session.teams[].members}
+
+## Adversarial Challenge
+
+{Include this section only if session.adversary_verdicts has entries, otherwise omit entirely}
+
+For each team with an adversary verdict:
+
+**Team**: {team name}
+**Verdict**: {ACCEPTED or CHALLENGED}
+**Findings**: {summary from adversary_findings}
+**Resolution**: {how challenged items were addressed, if applicable}
 
 ## Open Items
 

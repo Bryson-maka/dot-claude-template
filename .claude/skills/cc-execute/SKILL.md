@@ -1,8 +1,8 @@
 ---
 name: cc-execute
-description: Execute tasks with structured subagent orchestration and adversarial review
+description: Execute tasks with agent team orchestration and adversarial review
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Task, Bash, Edit, Write, NotebookEdit, AskUserQuestion
+allowed-tools: Read, Grep, Glob, Task, Bash, Edit, Write, NotebookEdit, AskUserQuestion, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskList, TaskUpdate, TaskGet
 argument-hint: [task description]
 ---
 
@@ -16,102 +16,171 @@ argument-hint: [task description]
 
 !`_err=$(mktemp) && uv run --with pyyaml python3 .claude/skills/cc-execute/discover.py --pretty 2>"$_err" || { python3 -c "import json,sys; print(json.dumps({'error':'Discovery failed','stderr':open(sys.argv[1]).read()}))" "$_err"; rm -f "$_err"; false; } && rm -f "$_err"`
 
+## Git Context
+
+!`python3 .claude/lib/git_context.py --pretty 2>/dev/null || echo '{"git_available": false}'`
+
+## Session Summary
+
+!`python3 .claude/lib/session_state.py summary 2>/dev/null || echo '{}'`
+
 ---
 
 ## Workflow
 
-### 1. Create Todos
+cc-execute uses **agent teams** for every task. You (the lead) reason about team composition based on the task, codebase state, and goals.
 
-Based on the task, create specific, verifiable todos:
-- Good: "Fix undefined variable at src/main.py:432"
-- Bad: "Fix bugs" (too vague)
+### 1. Analyze & Plan
 
-### 2. Investigate
+Break the task into specific, verifiable todos (use TaskCreate).
 
-Before implementing, spawn **Explore** subagents to verify assumptions:
+Then **reason about your team**. Consider:
+- What work needs to happen (research, implementation, testing, refactoring, web research)
+- How the work decomposes into independent responsibilities
+- Which responsibilities need write access vs read-only
+- What model capability each responsibility demands
+
+There is no fixed roster. You decide the number and type of agents based on the task.
+
+**Agent types available:**
+
+| Type | Tools | Use For |
+|------|-------|---------|
+| `Explore` | Read, Glob, Grep, Bash, WebFetch, WebSearch | Deep file reads, code search, web research, architecture analysis, adversarial challenge. **Cannot edit files.** |
+| `general-purpose` | All tools including Edit, Write, Bash | Implementation, refactoring, test execution, any work requiring code changes |
+
+**Model selection:** Use `sonnet` (default) for most work. Use `opus` for tasks requiring deep reasoning about complex architecture or subtle design decisions.
+
+### 2. Create Team & Deploy
 
 ```
-Task(subagent_type="Explore", description="Find X", prompt="""
-Read [file] completely. Your context is expendable.
-
-Find: [specific thing]
-
-Report (max 500 tokens):
-- Location: [file:line]
-- Finding: [what you found]
-- Recommendation: [what to do]
-""")
+TeamCreate(team_name="cc-exec-{short-task-slug}")
 ```
 
-**Spawn multiple investigators in parallel** using multiple foreground Task tool calls in a single message — do NOT use `run_in_background`.
+Spawn agents with descriptive, task-specific names:
 
-### 3. Execute
+```
+Task(
+  subagent_type="general-purpose",
+  team_name="cc-exec-{slug}",
+  name="auth-refactorer",
+  prompt="You are on the cc-exec team. Your responsibility: [specific assignment].
+    [Include all necessary context — teammates do NOT see the lead's conversation history or primed context.]"
+)
+```
 
-- **Small changes** (<10 lines): Spawn `general-purpose` subagent to implement
-- **Complex changes**: Spawn multiple `general-purpose` subagent to implement and take various perspectives to proactively catch hidden assumptions
+Create tasks via TaskCreate and assign via TaskUpdate(owner="agent-name").
+
+**Log team creation** for session tracking:
+```
+Bash: python3 .claude/lib/session_state.py log --type team_created --team-name "cc-exec-{slug}" --members "agent1:type:model,agent2:type:model"
+```
+
+### 3. Supervise & Coordinate
+
+- Monitor progress via TaskList
+- Use SendMessage to share findings between agents, redirect work, or assign follow-ups
+- Help unblock agents when they encounter obstacles
+- Agents can message each other for peer coordination
 
 ### 4. Verify
 
-**Check CLAUDE.md first** for the project's testing philosophy. Default: verify live, not with new tests.
+Check CLAUDE.md for the project's testing philosophy.
 
-- **Run existing tests** to check for regressions: `uv run pytest --tb=short -q`
-- **Do NOT write new tests** unless the user explicitly asks for them
-- **Prefer live verification** — run the actual CLI commands to confirm behavior works
+- Run existing tests to check for regressions
+- Do NOT write new tests unless the user explicitly asks
+- Prefer live verification — run actual commands to confirm behavior
 
-### 5. Adversarial Challenge (optional, only for significant architecture changes)
+### 5. Adversarial Challenge
 
-When the user explicitly requests it, or for major architectural changes, spawn a Devil's Advocate:
+**Required for every task.** After implementation and verification, spawn a Devil's Advocate on the team:
 
 ```
-Task(subagent_type="Explore", description="Challenge: [claim]", prompt="""
-The main agent claims: "[your claim]"
+Task(
+  subagent_type="Explore",
+  team_name="cc-exec-{slug}",
+  name="adversary",
+  prompt="""You are the Devil's Advocate for the cc-exec team. Your job: find holes
+using first principles and verified codebase evidence.
 
-Your job is to DISPROVE this. Find evidence that:
-- The design has architectural holes
-- The implementation doesn't serve the actual user workflow
-- Important code paths are unreachable or dead code
+**What changed**:
+[list every modified file and what each change does]
 
-Focus on DESIGN and ARCHITECTURE, not test coverage gaps.
+**Instructions**:
+1. Read every modified file completely
+2. Run `git diff` to see exact line-level changes
+3. Read adjacent code that interacts with the changes
+4. Challenge from first principles:
+   - Does the implementation actually solve the stated problem?
+   - Are there code paths that break under real usage?
+   - Does this integrate correctly with existing architecture?
+   - Are there implicit assumptions that aren't validated?
+   - Is there dead code or unreachable paths introduced?
 
-Report:
-- **Holes found**: [issues]
+Do NOT focus on test coverage gaps or style nits.
+Do NOT read .env, credentials, or secret files.
+
+**Report**:
+- **Files reviewed**: [list with line counts]
+- **Holes found**: [specific issues with file:line evidence]
+- **Strengths**: [what's solid about the implementation]
 - **Verdict**: CHALLENGED | ACCEPTED
-""")
+
+Every hole must cite specific file:line evidence from the codebase.""")
 ```
 
-Maximum 2 adversarial rounds. If still challenged, ask user.
+**Log the adversary verdict** for session tracking:
+```
+Bash: python3 .claude/lib/session_state.py log --type adversary_verdict --team-name "cc-exec-{slug}" --verdict "ACCEPTED" --findings "summary"
+```
+
+If CHALLENGED: address the findings, then re-challenge (maximum 2 rounds total). If still challenged, present findings to user for decision.
 
 ### 6. Complete
 
-- Mark todos complete
-- Summarize what was accomplished
-- List files modified
-
-## Subagent Roles
-
-| Role | Type | Model | When to Use |
-|------|------|-------|-------------|
-| **Investigator** | Explore | Sonnet | Read files, verify assumptions |
-| **Implementer** | general-purpose | Sonnet | Make code changes |
-| **Verifier** | general-purpose | Sonnet | Run tests, confirm changes |
-| **Adversary** | Explore | Sonnet | Challenge claims, find holes |
-| **Reasoner** | Explore | Opus | Complex analysis, design decisions, architecture |
+- Shutdown all team agents: SendMessage(type="shutdown_request") to each
+- Log team closure: `python3 .claude/lib/session_state.py log --type team_closed --team-name "cc-exec-{slug}"`
+- Clean up: TeamDelete
+- Mark all todos complete
+- Summarize: what was accomplished, files modified, adversary verdict
 
 ---
 
-## Quick Example
+## Agent Type Reference
+
+| Type | Tools | Best For |
+|------|-------|----------|
+| `Explore` | Read, Glob, Grep, Bash, WebFetch, WebSearch | Investigation, analysis, web research, adversarial challenge — **read-only, cannot edit files** |
+| `general-purpose` | All tools including Edit, Write, Bash | Implementation, testing, refactoring — **full access** |
+
+The lead decides team composition per task. There is no fixed roster.
+
+---
+
+## Example
 
 ```
-User: /cc-execute Fix the config parsing bug
+User: /cc-execute Refactor auth module to use JWT instead of session tokens
 
-1. Create todos: [find bug, fix it, verify, Challenge]
-2. Spawn investigators (parallel):
-   - "Read config.py, find parsing issue"
-   - "Read tests/test_config.py, what's tested"
-3. Investigators report: Line 142 expects dict, gets string
-4. Small fix - edit directly: Add type check at line 145
-5. Spawn verifier: "Run pytest tests/test_config.py"
-6. Verifier: Tests pass
-7. Adversarial Challenge: run up to 2 challenges and reflect on output of each and reason about how to intelligently address
-8. Mark todos complete, summarize full scope of execution
+1. Analyze: Complex refactor touching auth, routes, and middleware
+   Team: 3 agents
+   - "auth-analyzer" (Explore) — map current session token usage across codebase
+   - "jwt-implementer" (general-purpose) — build JWT generation, validation, middleware
+   - "route-migrator" (general-purpose) — update all route handlers to JWT flow
+
+2. Create team "cc-exec-jwt-refactor", spawn agents, assign tasks
+
+3. Supervise: auth-analyzer reports 14 files using session tokens
+   → Share findings with implementer and migrator via SendMessage
+   → jwt-implementer builds token module
+   → route-migrator updates handlers as implementer completes
+
+4. Verify: run existing auth tests, test login/logout flow
+
+5. Adversary reads all changed files + git diff:
+   "Token refresh not handled in middleware (auth/middleware.py:89)"
+   → Verdict: CHALLENGED
+   → Fix token refresh → re-challenge → ACCEPTED
+
+6. Shutdown team, summarize changes across 14 files
 ```

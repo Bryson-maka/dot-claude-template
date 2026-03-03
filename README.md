@@ -4,9 +4,9 @@ A portable `.claude/` directory template that gives [Claude Code](https://docs.a
 
 ## What This Is
 
-This repository provides a structured skill system for Claude Code that demonstrates advanced patterns: skills with YAML frontmatter, lifecycle hooks, session state management, and subagent orchestration. The `.claude/` directory contains:
+This repository provides a structured skill system for Claude Code that demonstrates advanced patterns: skills with YAML frontmatter, lifecycle hooks, session state management, and agent team orchestration. The `.claude/` directory contains:
 
-- **Skills** - Slash commands (`/cc-prime-cw`, `/cc-execute`, `/cc-conclude`, `/cc-learn`) that orchestrate multi-agent workflows
+- **Skills** - Slash commands (`/cc-prime-cw`, `/cc-execute`, `/cc-conclude`) that orchestrate multi-agent workflows
 - **Hooks** - Lifecycle event handlers for security validation, change tracking, and state preservation
 - **Session Management** - Persistent state tracking across your coding session
 - **Status Line Telemetry** - Command-driven status line with context usage, cost, and workflow state
@@ -59,6 +59,11 @@ The system automatically adapts to your project structure.
 ├── TEMPLATE_VERSION       # Template version for drift detection
 ├── SETTINGS_GUARD.md      # Rules for modifying settings.json
 ├── lib/                   # Shared Python library
+│   ├── session_state.py       # Session state tracking (schema v1.1, team-aware)
+│   ├── git_context.py         # Git intelligence (volatility, coupling, recent changes)
+│   ├── project_analyzer.py    # Auto-detect languages, frameworks, patterns
+│   ├── path_validator.py      # Symlink-safe path resolution
+│   └── verify_integrity.py    # Configuration drift detection
 ├── status_lines/          # Claude Code status line scripts
 │   └── status_line.py         # Model, context bar, cost, cwd
 ├── skills/                # Slash command skills
@@ -104,7 +109,7 @@ allowed_write_directories:
   - .claude/session
 ```
 
-Paths are relative to the project root. Symlinks are resolved before checking. The feature is **opt-in** — leave as `[]` or omit the key to disable. Run `/cc-learn` to auto-detect sensible defaults for your project type.
+Paths are relative to the project root. Symlinks are resolved before checking. The feature is **opt-in** — leave as `[]` or omit the key to disable.
 
 This is defense-in-depth layered on top of the 4-tier security model. Bash commands that can't be statically analyzed for write targets escalate to the ASK tier for user review.
 
@@ -115,13 +120,11 @@ See **[.claude/skills/README.md](.claude/skills/README.md)** for skill documenta
 ## Session Workflow
 
 ```
-/cc-learn        (optional) Auto-detect project config
-      |
 /cc-prime-cw     Load codebase context via analyst subagents
-      |
-/cc-execute      Execute tasks with structured subagent orchestration
-      |               hooks: validate commands, track changes
-/cc-conclude     Generate handoff, commit messages, update docs, archive
+      |               auto-detects project config if missing
+/cc-execute      Execute tasks with agent team orchestration
+      |               adversarial challenge on every task
+/cc-conclude     Generate handoff, commit, update docs, archive
 ```
 
 ## License

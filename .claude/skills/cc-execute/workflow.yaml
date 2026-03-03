@@ -3,51 +3,38 @@
 # This file defines the configurable aspects of the cc-execute command.
 # Edit these values to customize behavior for your project.
 
-# Subagent Configuration
-# Defines the roles, types, and models for subagents used during execution.
-subagents:
-  investigator:
-    type: Explore
-    model: sonnet
-    description: Read files, verify assumptions, find specific code
-    max_response_tokens: 500
+# Agent Types
+# Reference for the lead's team composition reasoning.
+# The lead decides how many agents and which types per task — no fixed roster.
+agent_types:
+  Explore:
+    tools: [Read, Glob, Grep, Bash, WebFetch, WebSearch]
+    cannot: [Edit, Write, NotebookEdit]
+    use_for: Investigation, analysis, web research, architecture review, adversarial challenge
 
-  implementer:
-    type: general-purpose
-    model: sonnet
-    description: Make code changes, refactoring, feature implementation
-    max_response_tokens: 1000
-
-  verifier:
-    type: general-purpose
-    model: sonnet
-    description: Run tests, confirm changes work correctly
-    max_response_tokens: 500
-
-  adversary:
-    type: Explore
-    model: sonnet
-    description: Challenge claims, find holes in implementation
-    max_response_tokens: 750
-
-  reasoner:
-    type: Explore
-    model: opus
-    description: Complex analysis, design decisions, architecture
-    max_response_tokens: 1000
+  general-purpose:
+    tools: [Read, Glob, Grep, Bash, Edit, Write, NotebookEdit, AskUserQuestion]
+    cannot: []
+    use_for: Implementation, refactoring, test execution, any work requiring code changes
 
 # Adversarial Challenge Configuration
 adversarial:
+  # Required for every task — the adversary reads actual files and git diff
+  required: true
+
   # Maximum rounds of challenge before escalating to user
   max_rounds: 2
 
-  # Triggers that require adversarial challenge before claiming complete
-  required_for:
-    - "implementation complete"
-    - "bug fixed"
-    - "feature added"
-    - "refactoring done"
-    - "tests passing"
+  # Agent type for adversary (read-only, cannot modify code)
+  agent_type: Explore
+
+  # Files the adversary must NOT read
+  excluded_patterns:
+    - ".env*"
+    - "*credentials*"
+    - "*secret*"
+    - "*.pem"
+    - "*.key"
 
 # Verification Configuration
 verification:
@@ -56,9 +43,6 @@ verification:
     - code_edit
     - file_create
     - dependency_change
-
-  # Skip verification for trivial changes (line count threshold)
-  trivial_change_threshold: 2
 
 # Project Detection
 # Patterns to detect project type and available commands.
@@ -280,44 +264,28 @@ project_detection:
     build_commands:
       - "python manage.py runserver"
 
-# Token Philosophy
-# Guidelines for subagent token usage.
-token_budget:
-  # Maximum tokens for subagent responses
-  max_subagent_response: 1000
-
-  # Threshold for spawning subagent vs reading directly
-  # Files larger than this should use subagent
-  direct_read_threshold_lines: 250
-
-  # Maximum files to read directly in one investigation
-  max_direct_reads: 5
-
 # Workflow Phases
 phases:
-  - name: understand
-    description: Gather context about the task
-    skippable: false
+  - name: analyze
+    description: Break task into todos, reason about team composition
+    required: true
 
-  - name: plan
-    description: Create specific, verifiable todos
-    skippable: false
+  - name: deploy
+    description: Create team, spawn agents, assign tasks
+    required: true
 
-  - name: investigate
-    description: Spawn investigators to verify assumptions
-    skippable: true
-    skip_for: trivial_tasks
-
-  - name: execute
-    description: Make changes (direct or via subagent)
-    skippable: false
+  - name: supervise
+    description: Monitor progress, coordinate agents, unblock work
+    required: true
 
   - name: verify
-    description: Confirm changes work
-    skippable: true
-    skip_for: trivial_tasks
+    description: Run existing tests, live verification
+    required: true
 
   - name: challenge
-    description: Adversarial review of claims
-    skippable: true
-    skip_for: trivial_tasks
+    description: Adversarial review — first principles, verified codebase evidence
+    required: true
+
+  - name: complete
+    description: Shutdown team, summarize results
+    required: true

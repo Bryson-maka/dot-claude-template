@@ -20,6 +20,10 @@ Prime your context window by deploying analyst subagents to explore the codebase
 
 !`_err=$(mktemp) && uv run --with pyyaml python3 .claude/skills/cc-prime-cw/discover.py --pretty 2>"$_err" || { python3 -c "import json,sys; print(json.dumps({'error':'Discovery failed','stderr':open(sys.argv[1]).read()}))" "$_err"; rm -f "$_err"; false; } && rm -f "$_err"`
 
+## Prior Session Constraints
+
+!`python3 .claude/lib/session_state.py summary 2>/dev/null || echo '{}'`
+
 ---
 
 ## Phase 1: Foundation
@@ -55,6 +59,13 @@ Respond with (**STRICT LIMIT: <=1000 tokens**):
 ```
 
 **Spawn all domain analysts in parallel** using a single message with multiple foreground Task tool calls — do NOT use `run_in_background`. They execute concurrently when issued in the same message and return results directly.
+
+**Greenfield projects**: If the manifest shows `"greenfield": true` (fewer than 5 source files), **skip analyst spawning**. Instead:
+- Report that the project is greenfield
+- Suggest the user describe their intended architecture
+- Note any detected frameworks/languages from auto-detection
+
+**Monorepo projects**: If the manifest shows `"monorepo"` with packages, **note cross-package dependencies** in your synthesis. Analysts should be aware that changes in one package may affect others.
 
 ## Phase 3: Synthesize
 

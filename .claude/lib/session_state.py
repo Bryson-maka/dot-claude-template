@@ -15,9 +15,9 @@ Usage:
     state.log_verification('test', passed=True, details='18 tests passed')
     state.conclude()
 
-State Schema (v1.0):
+State Schema (v1.1):
     {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "primed_at": "ISO timestamp or null",
         "concluded_at": "ISO timestamp or null",
         "domains": ["source", "config", ...],
@@ -25,10 +25,24 @@ State Schema (v1.0):
         "execution_journal": [
             {"ts": "...", "type": "task_created", "subject": "...", "task_id": "..."},
             {"ts": "...", "type": "subagent_spawned", "role": "...", "model": "..."},
+            {"ts": "...", "type": "team_created", "team_name": "...", "member_count": N, "members": [...]},
+            {"ts": "...", "type": "team_closed", "team_name": "..."},
+            {"ts": "...", "type": "adversary_verdict", "team_name": "...", "verdict": "...", "findings": "..."},
             ...
         ],
         "subagents": [
             {"role": "investigator", "type": "Explore", "model": "sonnet", "description": "..."},
+            ...
+        ],
+        "teams": [
+            {
+                "name": "cc-exec-auth-refactor",
+                "created_at": "ISO timestamp",
+                "closed_at": "ISO timestamp or null",
+                "members": [{"name": "...", "type": "...", "model": "..."}],
+                "adversary_verdict": "ACCEPTED or CHALLENGED or null",
+                "adversary_findings": "summary string or null"
+            },
             ...
         ],
         "verification_results": [
@@ -69,7 +83,7 @@ __all__ = [
 ]
 
 # Schema version for forward compatibility
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 
 def get_state_path(base_dir: Optional[Path] = None) -> Path:
@@ -126,8 +140,11 @@ class SessionState:
             try:
                 with open(self.state_path, 'r', encoding='utf-8') as f:
                     state = json.load(f)
-                # Validate schema version
-                if state.get('schema_version') != SCHEMA_VERSION:
+                # Migrate v1.0 -> v1.1: add teams array
+                if state.get('schema_version') == '1.0':
+                    state['teams'] = state.get('teams', [])
+                    state['schema_version'] = SCHEMA_VERSION
+                elif state.get('schema_version') != SCHEMA_VERSION:
                     print(f"Warning: State schema version mismatch", file=sys.stderr)
                 # Self-heal: ensure all required fields exist with correct types
                 defaults = self._default_state()
@@ -172,6 +189,7 @@ class SessionState:
             "foundation_docs": [],
             "execution_journal": [],
             "subagents": [],
+            "teams": [],
             "verification_results": [],
             "files_modified": [],
         }
@@ -221,6 +239,7 @@ class SessionState:
         # Clear previous execution data on new prime
         self.state["execution_journal"] = []
         self.state["subagents"] = []
+        self.state["teams"] = []
         self.state["verification_results"] = []
         self.state["files_modified"] = []
 
@@ -304,6 +323,75 @@ class SessionState:
         })
         return self._save()
 
+    # ========== Team Methods ==========
+
+    def log_team_created(self, team_name: str, members: list[dict]) -> bool:
+        """Log team creation.
+
+        Args:
+            team_name: Name of the team (e.g. 'cc-exec-auth-refactor')
+            members: List of dicts with keys: name, type, model
+        """
+        team_entry = {
+            "name": team_name,
+            "created_at": timestamp(),
+            "closed_at": None,
+            "members": members,
+            "adversary_verdict": None,
+            "adversary_findings": None,
+        }
+        self.state["teams"].append(team_entry)
+
+        self._log_journal("team_created", {
+            "team_name": team_name,
+            "member_count": len(members),
+            "members": members,
+        })
+
+        return self._save()
+
+    def log_team_closed(self, team_name: str) -> bool:
+        """Log team shutdown. Sets closed_at on matching team."""
+        for team in self.state["teams"]:
+            if team["name"] == team_name:
+                team["closed_at"] = timestamp()
+                break
+
+        self._log_journal("team_closed", {
+            "team_name": team_name,
+        })
+
+        return self._save()
+
+    def log_adversary_verdict(self, team_name: str, verdict: str, findings: str = None) -> bool:
+        """Log adversarial challenge result.
+
+        Args:
+            team_name: Name of the team being challenged
+            verdict: 'ACCEPTED' or 'CHALLENGED'
+            findings: Summary string of adversary findings
+        """
+        for team in self.state["teams"]:
+            if team["name"] == team_name:
+                team["adversary_verdict"] = verdict
+                team["adversary_findings"] = findings
+                break
+
+        self._log_journal("adversary_verdict", {
+            "team_name": team_name,
+            "verdict": verdict,
+            "findings": findings,
+        })
+
+        self.state["verification_results"].append({
+            "type": "adversarial",
+            "passed": verdict == "ACCEPTED",
+            "details": findings,
+            "ts": timestamp(),
+        })
+
+        return self._save()
+
     def log_verification(
         self,
         verification_type: str,
@@ -366,11 +454,22 @@ class SessionState:
             role = s.get("role", "unknown")
             subagent_counts[role] = subagent_counts.get(role, 0) + 1
 
+        teams = self.state.get("teams", [])
+
         return {
             "primed_at": self.state.get("primed_at"),
             "tasks_completed": tasks_completed,
             "subagents_spawned": len(subagents),
             "subagent_counts": subagent_counts,
+            "teams_created": len(teams),
+            "teams": [
+                {
+                    "name": t["name"],
+                    "members": len(t["members"]),
+                    "verdict": t.get("adversary_verdict"),
+                }
+                for t in teams
+            ],
             "verifications": self.state.get("verification_results", []),
             "files_modified": self.state.get("files_modified", []),
         }
@@ -459,7 +558,8 @@ def main():
     log_parser.add_argument('--type', required=True,
                            choices=['task_created', 'task_started', 'task_completed',
                                    'subagent', 'verification', 'file_modified',
-                                   'session_ended', 'session_checkpoint'])
+                                   'session_ended', 'session_checkpoint',
+                                   'team_created', 'team_closed', 'adversary_verdict'])
     log_parser.add_argument('--subject', help='Task subject')
     log_parser.add_argument('--task-id', help='Task ID')
     log_parser.add_argument('--role', help='Subagent role')
@@ -475,6 +575,11 @@ def main():
                            choices=['Explore', 'general-purpose', 'Bash', 'Plan'],
                            default='Explore',
                            help='Subagent type (default: Explore)')
+    log_parser.add_argument('--team-name', help='Team name (for team_created/team_closed/adversary_verdict)')
+    log_parser.add_argument('--members', help='Team members as name:type:model,... (for team_created)')
+    log_parser.add_argument('--verdict', choices=['ACCEPTED', 'CHALLENGED'],
+                           help='Adversary verdict (for adversary_verdict)')
+    log_parser.add_argument('--findings', help='Adversary findings summary (for adversary_verdict)')
 
     # conclude command
     subparsers.add_parser('conclude', help='Conclude session and archive')
@@ -521,6 +626,34 @@ def main():
                 print("Error: --file is required for file_modified", file=sys.stderr)
                 sys.exit(1)
             state.log_file_modified(args.file)
+        elif args.type == 'team_created':
+            if not args.team_name:
+                print("Error: --team-name is required for team_created", file=sys.stderr)
+                sys.exit(1)
+            if not args.members:
+                print("Error: --members is required for team_created", file=sys.stderr)
+                sys.exit(1)
+            members = []
+            for member_str in args.members.split(','):
+                parts = member_str.strip().split(':')
+                if len(parts) != 3:
+                    print(f"Error: Invalid member format '{member_str}', expected name:type:model", file=sys.stderr)
+                    sys.exit(1)
+                members.append({"name": parts[0], "type": parts[1], "model": parts[2]})
+            state.log_team_created(args.team_name, members)
+        elif args.type == 'team_closed':
+            if not args.team_name:
+                print("Error: --team-name is required for team_closed", file=sys.stderr)
+                sys.exit(1)
+            state.log_team_closed(args.team_name)
+        elif args.type == 'adversary_verdict':
+            if not args.team_name:
+                print("Error: --team-name is required for adversary_verdict", file=sys.stderr)
+                sys.exit(1)
+            if not args.verdict:
+                print("Error: --verdict is required for adversary_verdict", file=sys.stderr)
+                sys.exit(1)
+            state.log_adversary_verdict(args.team_name, args.verdict, args.findings)
         elif args.type == 'session_ended':
             state._log_journal("session_ended", {"details": args.details or ''})
             state._save()

@@ -148,6 +148,8 @@ class SessionContext:
     subagents_spawned: int = 0
     verifications: list[dict] | None = None
     files_modified_by_session: list[str] | None = None
+    teams: list[dict] = field(default_factory=list)
+    adversary_verdicts: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -539,6 +541,37 @@ def generate_recommendations(
     return recommendations
 
 
+def _extract_teams_from_state(base_dir: Path) -> list[dict]:
+    """Extract teams array from state.json.
+
+    The shared skill_helpers.get_session_context() doesn't include teams,
+    so we read them directly from state.json.
+    Returns empty list if state.json doesn't exist or has no teams.
+    """
+    state_path = base_dir / '.claude' / 'session' / 'state.json'
+    if not state_path.exists():
+        return []
+    try:
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+        return state.get('teams', [])
+    except (json.JSONDecodeError, IOError):
+        return []
+
+
+def _extract_adversary_verdicts(teams: list[dict]) -> list[dict]:
+    """Extract adversary verdicts from teams that have one."""
+    return [
+        {
+            'team': t.get('name'),
+            'verdict': t.get('adversary_verdict'),
+            'findings': t.get('adversary_findings'),
+        }
+        for t in teams
+        if t.get('adversary_verdict')
+    ]
+
+
 def get_session_context() -> SessionContext | None:
     """
     Load session context from state.json and manifest.
@@ -566,6 +599,9 @@ def get_session_context() -> SessionContext | None:
             1 for e in journal if e.get('type') == 'task_completed'
         )
 
+        # Extract teams from raw state if available
+        teams = _extract_teams_from_state(base_dir)
+
         return SessionContext(
             primed=shared_ctx.get('primed', False),
             domains=shared_ctx.get('domains', []),
@@ -576,6 +612,8 @@ def get_session_context() -> SessionContext | None:
             subagents_spawned=shared_ctx.get('subagents_spawned', 0),
             verifications=shared_ctx.get('verifications', []),
             files_modified_by_session=shared_ctx.get('files_modified_by_session', []),
+            teams=teams,
+            adversary_verdicts=_extract_adversary_verdicts(teams),
         )
 
     # Fallback if skill_helpers not available
@@ -609,6 +647,10 @@ def get_session_context() -> SessionContext | None:
             context.subagents_spawned = len(state.get('subagents', []))
             context.verifications = state.get('verification_results', [])
             context.files_modified_by_session = state.get('files_modified', [])
+
+            # Team data (v1.1+)
+            context.teams = state.get('teams', [])
+            context.adversary_verdicts = _extract_adversary_verdicts(context.teams)
 
         except (json.JSONDecodeError, IOError, KeyError):
             pass

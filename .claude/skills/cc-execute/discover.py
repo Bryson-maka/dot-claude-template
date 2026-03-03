@@ -230,19 +230,17 @@ def discover(base_dir: Path) -> dict:
     else:
         session = _local_get_session_context(base_dir)
 
-    # Get subagent config
-    subagents = config.get('subagents', {})
+    # Get agent type reference and adversarial config
+    agent_types = config.get('agent_types', {})
     adversarial = config.get('adversarial', {})
-    token_budget = config.get('token_budget', {})
 
     return {
         'base_directory': str(base_dir),
         'project_types': detected_types,
         'commands': commands,
         'session': session,
-        'subagents': subagents,
+        'agent_types': agent_types,
         'adversarial': adversarial,
-        'token_budget': token_budget,
     }
 
 

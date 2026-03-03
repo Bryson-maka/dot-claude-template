@@ -143,6 +143,33 @@ domains:
       - dev_tools
       - deployment
 
+  - name: embedded
+    description: |
+      Analyze embedded firmware, HAL layer, and hardware interfaces.
+      Microcontroller code, peripheral drivers, RTOS tasks, and build targets.
+    patterns:
+      - "src/**/*.ino"
+      - "src/**/*.c"
+      - "src/**/*.cpp"
+      - "include/**/*.h"
+      - "lib/**/*"
+      - "platformio.ini"
+      - "CMakeLists.txt"
+    keywords:
+      - "void setup|void loop"
+      - "GPIO|UART|SPI|I2C|ADC|PWM"
+      - "ISR|interrupt|__attribute__"
+      - "FreeRTOS|xTask|vTask|xQueue"
+      - "esp_|ESP_LOG|ESP_ERROR"
+      - "#ifdef|#if defined"
+      - "volatile|register"
+    report_sections:
+      - hardware_interfaces
+      - communication_protocols
+      - interrupt_handlers
+      - rtos_tasks
+      - build_targets
+
 # Metadata for the analyst system
 analyst_config:
   # Maximum files to analyze per domain
