@@ -8,7 +8,7 @@ Portable `.claude/` template providing skills, hooks, and session management for
 /cc-learn        → Auto-detect project languages, frameworks, commands
 /cc-prime-cw     → Load codebase context via analyst subagents
 /cc-execute      → Execute tasks with structured subagent orchestration
-/cc-conclude     → Generate commits, update docs, archive session
+/cc-conclude     → Generate handoff, commits, update docs, archive session
 ```
 
 ## Key Principles
@@ -33,6 +33,7 @@ Portable `.claude/` template providing skills, hooks, and session management for
 - `.claude/skills/` — Slash command skills with YAML frontmatter
 - `.claude/lib/` — Shared Python library (session_state.py, project_analyzer.py, verify_integrity.py)
 - `.claude/status_lines/` — Status line renderers for Claude Code (`status_line.py`)
+- `.claude/handoff/` — Session handoff pipeline (active.md + archive/)
 - `.claude/session/` — Runtime state (gitignored)
 
 ## Status Line

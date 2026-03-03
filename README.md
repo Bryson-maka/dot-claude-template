@@ -62,6 +62,9 @@ The system automatically adapts to your project structure.
 ├── status_lines/          # Claude Code status line scripts
 │   └── status_line.py         # Model, context bar, cost, cwd
 ├── skills/                # Slash command skills
+├── handoff/               # Session handoff pipeline
+│   ├── active.md              # Current handoff (read by cc-prime-cw)
+│   └── archive/               # Archived handoffs ({date}_{slug}.md)
 └── session/               # Runtime state (gitignored)
 CLAUDE.md                  # Root project context for Claude Code
 ```
@@ -118,7 +121,7 @@ See **[.claude/skills/README.md](.claude/skills/README.md)** for skill documenta
       |
 /cc-execute      Execute tasks with structured subagent orchestration
       |               hooks: validate commands, track changes
-/cc-conclude     Generate commit messages, update docs, archive session
+/cc-conclude     Generate handoff, commit messages, update docs, archive
 ```
 
 ## License

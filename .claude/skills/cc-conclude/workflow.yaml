@@ -103,6 +103,11 @@ phases:
     skippable: true
     skip_flag: --no-readme
 
+  - name: handoff
+    description: Generate session handoff, archive previous, update memory
+    skippable: true
+    skip_flag: --no-handoff
+
   - name: commit
     description: Stage files, generate message, create commit
     skippable: false
@@ -112,6 +117,11 @@ phases:
     description: Push commits to remote repository
     skippable: true
     optional: true
+
+# Handoff Configuration
+handoff:
+  active_path: ".claude/handoff/active.md"
+  archive_dir: ".claude/handoff/archive"
 
 # Git Configuration
 git:

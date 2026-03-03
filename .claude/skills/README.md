@@ -23,11 +23,11 @@ Portable skill system for Claude Code. Clone this `.claude/` directory into any 
 ## Session Lifecycle
 
 ```
-/cc-prime-cw     -> Load context, write state.json + manifest.json
+/cc-prime-cw     -> Load context + read active handoff
        |
 /cc-execute      -> Do work, log to state.json
        |
-/cc-conclude     -> Summarize, commit, archive to history.jsonl
+/cc-conclude     -> Summarize, handoff, commit, archive
 ```
 
 ## Directory Structure
@@ -54,6 +54,9 @@ Portable skill system for Claude Code. Clone this `.claude/` directory into any 
 │   ├── cc-execute/        # Task execution
 │   ├── cc-conclude/       # Session conclusion
 │   └── cc-learn/          # Configuration learning
+├── handoff/               # Session handoff pipeline
+│   ├── active.md          # Current handoff (read by cc-prime-cw)
+│   └── archive/           # Archived handoffs ({date}_{slug}.md)
 └── session/               # Runtime state (gitignored)
 ```
 

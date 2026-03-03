@@ -171,6 +171,7 @@ analyst_config:
     - "docs/ARCHITECTURE.md"
     - "DESIGN.md"
     - "docs/DESIGN.md"
+    - ".claude/handoff/active.md"
 
   # Project config file - merged with these base domains
   # Run /cc-learn to generate this file based on your project

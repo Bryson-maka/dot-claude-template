@@ -3,7 +3,7 @@ name: cc-conclude
 description: Generate session summary, update docs, and execute git workflow
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task, AskUserQuestion
-argument-hint: [--commit | --no-readme]
+argument-hint: [--commit | --no-readme | --no-handoff]
 ---
 
 # Session Conclusion
@@ -20,13 +20,15 @@ The output above includes:
 - **triggers**: README update triggers detected
 - **recommendations**: Prioritized git commands to run (stage, commit, push)
 - **session**: Context from `/cc-prime-cw` if run earlier (domains analyzed, foundation docs)
+- **handoff**: Session handoff state (`active_exists`, `active_title`, `active_date`, `archive_count`)
 
 ---
 
 ## Arguments
 
-- `--commit`: Quick commit (skip README check, minimal prompts)
+- `--commit`: Quick commit (skip README check and handoff, minimal prompts)
 - `--no-readme`: Skip README check but full git workflow
+- `--no-handoff`: Skip handoff generation
 - (default): Full workflow with all checks
 
 ---
@@ -76,7 +78,75 @@ If the git state above shows README triggers detected:
 3. Present draft for user approval
 4. Apply if approved
 
-### Phase 4: Git Commit
+### Phase 4: Handoff (unless --no-handoff or --commit)
+
+Generate a session handoff document so the next Claude Code session can pick up where this one left off.
+
+**Step 4a — Archive existing handoff:**
+
+If `handoff.active_exists` is true in the analysis output:
+1. Read `.claude/handoff/active.md` to get its title (first `#` heading) and date (`**Date**:` line)
+2. Derive archive filename: `{date}_{slug}.md` where slug is the title kebab-cased, lowercased, non-alphanumeric stripped (e.g., "Slack Stabilization Investigation" → `slack-stabilization-investigation`)
+3. Move `active.md` → `.claude/handoff/archive/{date}_{slug}.md`
+4. Create `.claude/handoff/archive/` directory if it doesn't exist
+
+**Step 4b — Generate new `active.md`:**
+
+Write `.claude/handoff/active.md` using this template. Fill each section from git diff, session state, and your understanding of what happened this session. The title should reflect what was ACCOMPLISHED, not what was originally planned.
+
+```markdown
+# {Title — what was accomplished this session}
+
+**Date**: {YYYY-MM-DD}
+**Status**: {one-line status}
+**Prior session**: `.claude/handoff/archive/{previous archived filename}` (if any)
+
+---
+
+## Accomplished
+
+- {Bullet list of concrete things completed}
+
+## Discovered
+
+- {Insights, patterns, or findings from this session}
+- {Only include if something was actually discovered}
+
+## Open Items
+
+- {Unfinished work, known issues, or things that need follow-up}
+
+## Priorities for Next Session
+
+1. {Most important next step}
+2. {Second priority}
+3. {Third priority if applicable}
+
+## Testing Protocol
+
+- {How to verify what was built — live commands, not unit tests}
+
+## Guardrails
+
+- {Things the next session should NOT do}
+- {Common mistakes to avoid}
+
+## Key Files Modified
+
+| File | Changes |
+|------|---------|
+| `path/to/file` | Brief description of changes |
+```
+
+**Step 4c — Review MEMORY.md:**
+
+Check if any stable patterns were confirmed this session that should be added to `~/.claude/projects/*/memory/MEMORY.md`:
+- Only add verified findings confirmed across this session's work
+- Do not duplicate what's already in MEMORY.md
+- Do not add speculative or single-observation conclusions
+- If nothing qualifies, skip this step
+
+### Phase 5: Git Commit
 
 **Follow the `recommendations` array above** - it contains the exact commands to run:
 

@@ -76,41 +76,43 @@ DEFAULT_README_TRIGGERS = {
 }
 
 
-def load_config() -> dict:
-    """Load configuration from workflow.yaml.
-
-    Returns the readme_triggers section, or defaults if file not found.
-    """
-    if HAS_SKILL_HELPERS:
-        config_path = Path(__file__).parent / 'workflow.yaml'
-        full_config = load_yaml_config(config_path, {})
-        if full_config and 'readme_triggers' in full_config:
-            return full_config['readme_triggers']
-        return DEFAULT_README_TRIGGERS
-
-    # Fallback if skill_helpers not available
-    if not HAS_YAML:
-        return DEFAULT_README_TRIGGERS
-
+def _load_full_config() -> dict:
+    """Load full configuration from workflow.yaml."""
     config_path = Path(__file__).parent / 'workflow.yaml'
 
+    if HAS_SKILL_HELPERS:
+        return load_yaml_config(config_path, {}) or {}
+
+    if not HAS_YAML:
+        return {}
+
     if not config_path.exists():
-        return DEFAULT_README_TRIGGERS
+        return {}
 
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-
-        if config and 'readme_triggers' in config:
-            return config['readme_triggers']
+            return yaml.safe_load(f) or {}
     except (yaml.YAMLError, IOError) as e:
         print(f"Warning: Could not load workflow.yaml: {e}", file=sys.stderr)
-
-    return DEFAULT_README_TRIGGERS
+        return {}
 
 
 # Load configuration at module level
-README_TRIGGERS = load_config()
+_FULL_CONFIG = _load_full_config()
+README_TRIGGERS = _FULL_CONFIG.get('readme_triggers', DEFAULT_README_TRIGGERS)
+HANDOFF_CONFIG = _FULL_CONFIG.get('handoff', {
+    'active_path': '.claude/handoff/active.md',
+    'archive_dir': '.claude/handoff/archive',
+})
+
+
+@dataclass
+class HandoffState:
+    """State of the session handoff pipeline."""
+    active_exists: bool
+    active_title: str | None = None    # First # heading from active.md
+    active_date: str | None = None     # **Date**: value from active.md
+    archive_count: int = 0
 
 
 @dataclass
@@ -166,6 +168,49 @@ class AnalysisResult:
     summary: str
     recommendations: list[GitRecommendation]
     session: SessionContext | None = None
+    handoff: HandoffState | None = None
+
+
+def detect_handoff_state() -> HandoffState:
+    """Detect the current state of the handoff pipeline.
+
+    Reads active handoff file for title/date, counts archived handoffs.
+    Paths are configured in workflow.yaml under the 'handoff' key.
+    """
+    if HAS_SKILL_HELPERS:
+        base_dir = get_base_dir(__file__)
+    else:
+        script_dir = Path(__file__).parent.resolve()
+        base_dir = script_dir.parent.parent.parent.resolve()
+
+    active_path = base_dir / HANDOFF_CONFIG['active_path']
+    archive_dir = base_dir / HANDOFF_CONFIG['archive_dir']
+
+    state = HandoffState(active_exists=active_path.exists())
+
+    if state.active_exists:
+        try:
+            with open(active_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= 10:
+                        break
+                    line = line.strip()
+                    if line.startswith('# ') and state.active_title is None:
+                        state.active_title = line[2:].strip()
+                    if line.startswith('**Date'):
+                        # Extract date from "**Date**: 2026-03-03" or "**Date written**: ..."
+                        parts = line.split(':', 1)
+                        if len(parts) == 2:
+                            state.active_date = parts[1].strip().rstrip('*')
+        except IOError:
+            pass
+
+    if archive_dir.exists():
+        state.archive_count = sum(
+            1 for f in archive_dir.iterdir() if f.is_file() and f.suffix == '.md'
+        )
+
+    return state
 
 
 def run_git(args: list[str], preserve_leading_space: bool = False) -> str:
@@ -629,6 +674,7 @@ def analyze() -> AnalysisResult:
     summary = generate_summary(git_state, changes)
     recommendations = generate_recommendations(git_state, changes)
     session = get_session_context()
+    handoff = detect_handoff_state()
 
     return AnalysisResult(
         git_state=git_state,
@@ -637,6 +683,7 @@ def analyze() -> AnalysisResult:
         summary=summary,
         recommendations=recommendations,
         session=session,
+        handoff=handoff,
     )
 
 
@@ -714,6 +761,7 @@ def main():
             'recommendations': [asdict(r) for r in result.recommendations],
             'summary': result.summary,
             'session': asdict(result.session) if result.session else None,
+            'handoff': asdict(result.handoff) if result.handoff else None,
         }
         print(json.dumps(output, indent=2))
 
