@@ -1,7 +1,7 @@
 # Agent team orchestration, git intelligence, and smarter discovery
 
 **Date**: 2026-03-03
-**Status**: Complete — P1/P2/P3 implemented, adversary accepted after round 2 fixes
+**Status**: Complete — P1/P2/P3 implemented + cruft sweep, both adversary accepted
 **Prior session**: `.claude/handoff/archive/2026-03-02_added-session-handoff-pipeline-to-cc-conclude.md`
 
 ---
@@ -21,6 +21,9 @@
 - Updated cc-conclude to surface team composition and adversary verdicts in handoffs
 - Fixed run_in_background prohibition in parallel subagent spawning (earlier in session)
 - Updated README.md to reflect new architecture
+- Removed cc-learn skill directory (3 files, -461 lines) — functionality fully absorbed into cc-prime-cw
+- Cleaned all cc-learn references from settings.json, CLAUDE.md, skills/README.md, domains.yaml, discover.py
+- Updated cc-conclude/SKILL.md to prioritize teams over legacy subagent fields
 
 ## Discovered
 
@@ -41,6 +44,14 @@ Team `cc-exec-p1p2p3` executed the P1/P2/P3 implementation:
 | conclude-engineer | general-purpose | opus | cc-conclude team-aware handoffs |
 | adversary | Explore | sonnet | Devil's advocate on all changes |
 
+Team `cc-exec-cruft-sweep` executed the cleanup sweep:
+
+| Agent | Type | Model | Responsibility |
+|-------|------|-------|---------------|
+| auditor | Explore | sonnet | Deep audit of all .claude/ files for cruft and dead references |
+| cleaner | general-purpose | sonnet | Delete cc-learn, fix all stale references across 9 files |
+| adversary | Explore | sonnet | Verify cleanup didn't break functionality |
+
 ## Adversarial Challenge
 
 **Team**: cc-exec-p1p2p3
@@ -48,9 +59,12 @@ Team `cc-exec-p1p2p3` executed the P1/P2/P3 implementation:
 **Round 1 Findings**: (1) git_context.py not in settings.json permissions — inline block silently degrades, (2) `summary --json` flag doesn't exist — inline block always returns `{}`
 **Resolution**: Added git_context.py permission to settings.json, removed `--json` flag from cc-prime-cw SKILL.md inline block
 
-## Open Items
+**Team**: cc-exec-cruft-sweep
+**Verdict**: ACCEPTED
+**Findings**: One WARN — stale handoff priority #3 still listed cc-learn removal as future work after it was already done
+**Resolution**: Removed stale priority from handoff
 
-- cc-learn skill still exists on disk but is functionally absorbed — consider removing the skill directory in a future cleanup
+## Open Items
 - Sync these changes to ceo-test-modules project (was done for earlier fixes, not yet for P1/P2/P3)
 - The embedded domain in domains.yaml has not been tested against a real embedded project
 - Monorepo detection is basic (counts package managers) — may need refinement for workspaces
@@ -59,7 +73,6 @@ Team `cc-exec-p1p2p3` executed the P1/P2/P3 implementation:
 
 1. Sync P1/P2/P3 changes to ceo-test-modules and verify end-to-end
 2. Live test the full workflow: `/cc-prime-cw` → `/cc-execute` → `/cc-conclude` on a real task
-3. Consider removing the cc-learn skill directory (functionality absorbed into cc-prime-cw)
 
 ## Testing Protocol
 
@@ -92,3 +105,6 @@ Team `cc-exec-p1p2p3` executed the P1/P2/P3 implementation:
 | `.claude/skills/cc-prime-cw/domains.yaml` | Added embedded domain with hardware keywords |
 | `.claude/skills/cc-prime-cw/SKILL.md` | Session summary inline block, greenfield/monorepo handling |
 | `README.md` | Updated for teams, lib/ contents, workflow diagram, removed cc-learn references |
+| `.claude/skills/cc-learn/` | DELETED: SKILL.md, learn.py, config.yaml (functionality absorbed into cc-prime-cw) |
+| `CLAUDE.md` | Removed cc-learn from workflow, updated to agent team orchestration, expanded lib/ listing |
+| `.claude/skills/README.md` | Removed cc-learn from table/Quick Start/dir tree, updated descriptions |

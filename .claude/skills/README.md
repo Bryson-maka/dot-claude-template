@@ -7,15 +7,13 @@ Portable skill system for Claude Code. Clone this `.claude/` directory into any 
 | Command | Purpose |
 |---------|---------|
 | `/cc-prime-cw` | Load codebase context via analyst subagents |
-| `/cc-execute [task]` | Structured task execution with subagent orchestration |
+| `/cc-execute [task]` | Task execution with agent team orchestration |
 | `/cc-conclude` | Session wrap-up, README updates, git commit workflow |
-| `/cc-learn` | Auto-discover project patterns and evolve configuration |
 
 ## Quick Start
 
 ```bash
-/cc-learn --apply     # (Optional) Auto-configure for your project
-/cc-prime-cw          # Load codebase context
+/cc-prime-cw          # Load codebase context (auto-detects project structure)
 /cc-execute Fix bug   # Do work
 /cc-conclude          # Commit and archive
 ```
@@ -48,12 +46,15 @@ Portable skill system for Claude Code. Clone this `.claude/` directory into any 
 │   └── session-end.sh          # SessionEnd: log termination
 ├── lib/                   # Shared Python library
 │   ├── session_state.py        # Session state management
-│   └── project_analyzer.py     # Project analysis + framework detection
+│   ├── project_analyzer.py     # Project analysis + framework detection
+│   ├── git_context.py          # Git intelligence (volatility, coupling, recent changes)
+│   ├── path_validator.py       # Symlink-safe path resolution
+│   ├── skill_helpers.py        # Shared utilities for skill scripts
+│   └── verify_integrity.py     # Configuration drift detection
 ├── skills/                # Slash command skills (each has SKILL.md)
 │   ├── cc-prime-cw/       # Context priming
 │   ├── cc-execute/        # Task execution
-│   ├── cc-conclude/       # Session conclusion
-│   └── cc-learn/          # Configuration learning
+│   └── cc-conclude/       # Session conclusion
 ├── handoff/               # Session handoff pipeline
 │   ├── active.md          # Current handoff (read by cc-prime-cw)
 │   └── archive/           # Archived handoffs ({date}_{slug}.md)

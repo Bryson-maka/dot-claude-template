@@ -5,15 +5,14 @@ Portable `.claude/` template providing skills, hooks, and session management for
 ## Session Workflow
 
 ```
-/cc-learn        → Auto-detect project languages, frameworks, commands
 /cc-prime-cw     → Load codebase context via analyst subagents
-/cc-execute      → Execute tasks with structured subagent orchestration
+/cc-execute      → Execute tasks with agent team orchestration
 /cc-conclude     → Generate handoff, commits, update docs, archive session
 ```
 
 ## Key Principles
 
-- **Your context is precious, subagent context is expendable** — Subagents read 50-100K tokens internally, report back <=1000 tokens each
+- **Your context is precious, subagent and team agent context is expendable** — Subagents read 50-100K tokens internally, report back <=1000 tokens each
 - **Hooks are deterministic, instructions are advisory** — Security enforcement lives in hooks, not prompts
 - **Native permissions are the safety net, hooks add nuance** — settings.json deny/ask/allow catches basics; hooks handle complex logic like safe_delete_paths downgrades
 - **Status line is real-time telemetry** — Keep context/cost/workflow visibility concise and cheap to compute
@@ -31,7 +30,7 @@ Portable `.claude/` template providing skills, hooks, and session management for
 
 - `.claude/hooks/` — Lifecycle hook scripts (security, tracking, session management)
 - `.claude/skills/` — Slash command skills with YAML frontmatter
-- `.claude/lib/` — Shared Python library (session_state.py, project_analyzer.py, verify_integrity.py)
+- `.claude/lib/` — Shared Python library (session_state.py, project_analyzer.py, git_context.py, path_validator.py, skill_helpers.py, verify_integrity.py)
 - `.claude/status_lines/` — Status line renderers for Claude Code (`status_line.py`)
 - `.claude/handoff/` — Session handoff pipeline (active.md + archive/)
 - `.claude/session/` — Runtime state (gitignored)

@@ -52,11 +52,11 @@ git log --oneline -5
 
 The analysis output above includes session context from `.claude/session/state.json`:
 - `session.tasks_completed`: Count of completed tasks
-- `session.subagents_spawned`: Count of subagents used
+- `session.teams`: Agent teams created during execution (primary)
+- `session.adversary_verdicts`: Adversarial challenge results per team
 - `session.verifications`: Test/lint/adversarial results
 - `session.files_modified_by_session`: Files modified during execution
-- `session.teams`: Agent teams created during execution (v1.1+)
-- `session.adversary_verdicts`: Adversarial challenge results per team
+- `session.subagents_spawned`: Count of direct subagents (cc-prime-cw analysts)
 
 **To view detailed session state**:
 ```bash
@@ -67,8 +67,7 @@ python3 .claude/lib/session_state.py summary
 Generate session summary using this data:
 - **Status**: COMPLETED, IN_PROGRESS, or BLOCKED
 - **Tasks**: From execution_journal task_completed entries
-- **Subagents**: Count and roles from subagents list
-- **Teams**: If `session.teams` has entries, summarize team count, member composition, and roles
+- **Teams**: From teams list and composition; include legacy subagent counts if present
 - **Adversarial Challenges**: If `session.adversary_verdicts` has entries, include verdict (ACCEPTED/CHALLENGED) and key findings for each
 - **Verification**: Test results and adversarial challenge outcomes
 - **Files Changed**: From git diff + files_modified list
