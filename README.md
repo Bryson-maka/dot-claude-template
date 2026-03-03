@@ -20,12 +20,16 @@ This repository provides a structured skill system for Claude Code that demonstr
 git clone https://github.com/Bryson-maka/dot-claude-template.git my-project
 cd my-project
 rm -rf .git && git init  # Start fresh git history
+# Placeholder active.md is already correct for a fresh project
 ```
 
 ### Option 2: Add to Existing Project
 
 ```bash
-# Copy .claude directory into your project
+# Use the install script (recommended — handles cleanup)
+/path/to/dot-claude-template/.claude/install.sh /path/to/your-project
+
+# Or copy manually and run /cc-prime-cw to initialize
 cp -r /path/to/dot-claude-template/.claude /path/to/your-project/
 ```
 
