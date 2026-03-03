@@ -43,7 +43,7 @@ Report (max 500 tokens):
 """)
 ```
 
-**Spawn multiple investigators in parallel** for thorough, multi-perspective analysis.
+**Spawn multiple investigators in parallel** using multiple foreground Task tool calls in a single message — do NOT use `run_in_background`.
 
 ### 3. Execute
 
@@ -52,23 +52,26 @@ Report (max 500 tokens):
 
 ### 4. Verify
 
-Spawn subagent to confirm changes work. Use the test command from `commands.test` in the Project Context above:
-```
-Task(subagent_type="general-purpose", description="Verify fix", prompt="Run [test command from context], confirm the change works...")
-```
+**Check CLAUDE.md first** for the project's testing philosophy. Default: verify live, not with new tests.
 
-### 5. Adversarial Challenge
+- **Run existing tests** to check for regressions: `uv run pytest --tb=short -q`
+- **Do NOT write new tests** unless the user explicitly asks for them
+- **Prefer live verification** — run the actual CLI commands to confirm behavior works
 
-Before claiming "implementation complete", spawn a Devil's Advocate:
+### 5. Adversarial Challenge (optional, only for significant architecture changes)
+
+When the user explicitly requests it, or for major architectural changes, spawn a Devil's Advocate:
 
 ```
 Task(subagent_type="Explore", description="Challenge: [claim]", prompt="""
 The main agent claims: "[your claim]"
 
 Your job is to DISPROVE this. Find evidence that:
-- The fix is incomplete or incorrect
-- Edge cases not handled
-- Tests passing for wrong reasons
+- The design has architectural holes
+- The implementation doesn't serve the actual user workflow
+- Important code paths are unreachable or dead code
+
+Focus on DESIGN and ARCHITECTURE, not test coverage gaps.
 
 Report:
 - **Holes found**: [issues]

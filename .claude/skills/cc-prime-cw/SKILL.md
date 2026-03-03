@@ -54,11 +54,11 @@ Respond with (**STRICT LIMIT: <=1000 tokens**):
 - **{section}**: [findings]
 ```
 
-**Spawn all domain analysts in parallel** using a single message with multiple Task tool calls.
+**Spawn all domain analysts in parallel** using a single message with multiple foreground Task tool calls — do NOT use `run_in_background`. They execute concurrently when issued in the same message and return results directly.
 
 ## Phase 3: Synthesize
 
-After subagents complete, provide a summary:
+After all Task calls return (they complete in the same turn), provide a summary:
 
 ```
 ## Context Primed
