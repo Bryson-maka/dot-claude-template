@@ -33,6 +33,16 @@ rm -rf .git && git init  # Start fresh git history
 cp -r /path/to/dot-claude-template/.claude /path/to/your-project/
 ```
 
+### Option 3: Update an Existing Installation
+
+```bash
+# Preview what would change
+/path/to/dot-claude-template/.claude/install.sh /path/to/your-project --update --dry
+
+# Apply updates (only changed template files — preserves handoff, session, project config)
+/path/to/dot-claude-template/.claude/install.sh /path/to/your-project --update
+```
+
 ### Then
 
 ```bash

@@ -39,6 +39,7 @@ domains:
       - architecture_patterns
       - entry_points
       - key_abstractions
+      - modification_targets
 
   - name: config
     description: |
@@ -68,6 +69,7 @@ domains:
       - dependencies
       - build_config
       - environment
+      - modification_targets
 
   - name: tests
     description: |
@@ -92,6 +94,7 @@ domains:
       - fixtures
       - coverage_areas
       - test_patterns
+      - modification_targets
 
   - name: docs
     description: |
@@ -116,6 +119,7 @@ domains:
       - setup_instructions
       - architecture_docs
       - api_docs
+      - modification_targets
 
   - name: scripts
     description: |
@@ -142,6 +146,7 @@ domains:
       - ci_cd
       - dev_tools
       - deployment
+      - modification_targets
 
   - name: embedded
     description: |
@@ -169,6 +174,7 @@ domains:
       - interrupt_handlers
       - rtos_tasks
       - build_targets
+      - modification_targets
 
 # Metadata for the analyst system
 analyst_config:

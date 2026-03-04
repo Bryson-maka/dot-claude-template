@@ -60,6 +60,11 @@ try:
     HAS_SKILL_HELPERS = True
 except ImportError:
     HAS_SKILL_HELPERS = False
+try:
+    import git_context as _git_context
+    HAS_GIT_CONTEXT = True
+except ImportError:
+    HAS_GIT_CONTEXT = False
 finally:
     # Clean up sys.path after import
     lib_path = str(Path(__file__).parent.parent.parent / 'lib')
@@ -437,6 +442,34 @@ def detect_monorepo(base_dir: Path, all_files: list[dict[str, Any]]) -> dict[str
     }
 
 
+def generate_git_summary(base_dir: Path) -> Dict[str, Any]:
+    """Generate a compact git summary with top volatile files and coupled pairs.
+
+    Returns a small dict suitable for the manifest — NOT the full git context.
+    cc-execute already runs git_context.py inline for full data.
+    """
+    if not HAS_GIT_CONTEXT:
+        return {"git_available": False}
+
+    try:
+        if not _git_context._is_git_repo(base_dir):
+            return {"git_available": False}
+
+        summary: Dict[str, Any] = {"git_available": True}
+
+        # Top 5 volatile files (compact)
+        volatility = _git_context.file_volatility(base_dir, days=30)
+        summary["volatile_files"] = volatility[:5]
+
+        # Top 3 coupled pairs (compact)
+        coupling = _git_context.change_coupling(base_dir, commits=50)
+        summary["coupled_pairs"] = coupling[:3]
+
+        return summary
+    except Exception:
+        return {"git_available": False}
+
+
 def merge_domains(
     base_domains: dict[str, Any],
     project_domains: list[dict[str, Any]] | dict[str, Any]
@@ -647,7 +680,7 @@ def generate_manifest(
             max_files=max_files_per_domain
         )
 
-    # Greenfield detection: fewer than 5 source files means new/empty project
+    # Greenfield detection: computed BEFORE pruning so all source files are counted
     all_files = []
     for domain_data in manifest['domains'].values():
         all_files.extend(domain_data.get('files', []))
@@ -657,17 +690,59 @@ def generate_manifest(
     )
     manifest['greenfield'] = source_file_count < 5
 
+    # P3: Prune empty domains (0 files)
+    manifest['domains'] = {
+        name: data for name, data in manifest['domains'].items()
+        if data.get('files')
+    }
+
+    # P4: Topology summary block — compact orchestration overview (after pruning)
+    total_files = 0
+    total_lines = 0
+    domain_stats: Dict[str, Dict[str, int]] = {}
+    for name, data in manifest['domains'].items():
+        files = data.get('files', [])
+        d_files = len(files)
+        d_lines = sum(f.get('lines', 0) for f in files)
+        domain_stats[name] = {"files": d_files, "lines": d_lines}
+        total_files += d_files
+        total_lines += d_lines
+    manifest['topology'] = {
+        "total_files": total_files,
+        "total_lines": total_lines,
+        "domains_active": len(manifest['domains']),
+        "domain_stats": domain_stats,
+    }
+
     # Monorepo detection
     manifest['monorepo'] = detect_monorepo(base_dir, all_files)
 
     # Handoff constraints from prior session
     manifest['handoff_constraints'] = parse_handoff_constraints(base_dir)
 
+    # P2: Compact git summary (top 5 volatile files, top 3 coupled pairs)
+    manifest['git_summary'] = generate_git_summary(base_dir)
+
     # Include analyst_config metadata if present
     if analyst_config:
         manifest['analyst_config'] = analyst_config
 
-    return manifest
+    # Reorder keys: topology should appear after foundation, before domains
+    key_order = [
+        'generated_at', 'base_directory', 'foundation', 'topology',
+        'domains', 'greenfield', 'monorepo', 'handoff_constraints',
+        'git_summary', 'analyst_config', 'session_path', 'state_updated',
+    ]
+    ordered: Dict[str, Any] = {}
+    for key in key_order:
+        if key in manifest:
+            ordered[key] = manifest[key]
+    # Append any remaining keys not in the explicit order
+    for key, value in manifest.items():
+        if key not in ordered:
+            ordered[key] = value
+
+    return ordered
 
 
 def save_session_manifest(manifest: dict[str, Any], base_dir: Path) -> Path | None:
@@ -805,9 +880,12 @@ def main():
         if state_updated:
             manifest['state_updated'] = True
 
+    # P5: Strip analyst_config from stdout output (already saved with full manifest above)
+    output_manifest = {k: v for k, v in manifest.items() if k != 'analyst_config'}
+
     # Output JSON
     indent = 2 if args.pretty else None
-    json.dump(manifest, sys.stdout, indent=indent)
+    json.dump(output_manifest, sys.stdout, indent=indent)
 
     if args.pretty:
         print()  # Add trailing newline for pretty output
