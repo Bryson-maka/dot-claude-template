@@ -142,7 +142,9 @@ If CHALLENGED: address the findings, then re-challenge (maximum 2 rounds total).
 - Log team closure: `python3 .claude/lib/session_state.py log --type team_closed --team-name "cc-exec-{slug}"`
 - Clean up: TeamDelete
 - Mark all todos complete
-- Summarize: what was accomplished, files modified, adversary verdict
+- Summarize to the user: what was accomplished, files modified, adversary verdict
+
+**Do NOT update `.claude/handoff/active.md` or memory files.** Handoff generation, archiving, and memory updates are owned by `/cc-conclude`. Your summary is an in-conversation report only.
 
 ---
 
