@@ -178,6 +178,18 @@ SOURCE_CODE_LANGUAGES = {
     'zig', 'arduino', 'verilog', 'systemverilog', 'vhdl',
 }
 
+SOURCE_ROOT_NAMES = {'src', 'lib', 'app', 'pkg', 'internal'}
+SCRIPT_ROOT_NAMES = {'scripts', 'bin', 'tools'}
+DOC_ROOT_NAMES = {'docs', 'doc'}
+CONFIG_ROOT_NAMES = {'config', 'configs', 'settings'}
+
+TEST_NAME_RE = re.compile(r'^(test(s|ing)?|spec(s)?|__tests?__)$', re.IGNORECASE)
+DOC_NAME_RE = re.compile(r'^(doc(s|umentation)?)$', re.IGNORECASE)
+SCRIPT_NAME_RE = re.compile(r'^(script(s)?|tool(s)?|bin|util(s|ity|ities)?)$', re.IGNORECASE)
+CONFIG_NAME_RE = re.compile(r'^(config(s)?|conf|cfg|settings?)$', re.IGNORECASE)
+EXAMPLE_NAME_RE = re.compile(r'^(example(s)?|sample(s)?|demo(s)?)$', re.IGNORECASE)
+ASSET_NAME_RE = re.compile(r'^(asset(s)?|static|public|resource(s)?)$', re.IGNORECASE)
+
 
 @dataclass
 class FileStats:
@@ -328,31 +340,39 @@ def analyze_directories(files: List[FileStats], base_dir: Path) -> List[Director
         if not dir_path:
             continue
 
-        # Determine purpose based on directory name and contents
-        dir_name = Path(dir_path).name.lower()
+        # Determine purpose based on the full directory path and contents.
+        path_parts = [part.lower() for part in Path(dir_path).parts if part]
         languages = list(set(f.language for f in dir_file_list if f.language != 'unknown'))
+        has_source_anchor = any(part in SOURCE_ROOT_NAMES for part in path_parts)
 
-        # Infer purpose using word-boundary regex to avoid false matches
+        # Prefer higher-signal path segments over leaf-name guesses so nested
+        # test or util folders under src are not misclassified.
         purpose = 'unknown'
-        if re.search(r'\b(test(s|ing)?|spec(s)?|__test__)\b', dir_name, re.IGNORECASE):
+        if any(TEST_NAME_RE.match(part) for part in path_parts):
             purpose = 'tests'
-        elif re.search(r'\b(src|lib(s|rary)?|app(s)?|pkg|internal)\b', dir_name, re.IGNORECASE):
-            purpose = 'source'
-        elif re.search(r'\b(doc(s|umentation)?)\b', dir_name, re.IGNORECASE):
+        elif any(part in DATA_DIR_PATTERNS for part in path_parts):
+            purpose = 'unknown'
+        elif path_parts and path_parts[0] in DOC_ROOT_NAMES:
             purpose = 'docs'
-        elif re.search(r'\b(script(s)?|bin|tool(s)?|util(s|ity|ities)?)\b', dir_name, re.IGNORECASE):
-            purpose = 'scripts'
-        elif re.search(r'\b(config(s)?|conf|cfg|settings?)\b', dir_name, re.IGNORECASE):
+        elif path_parts and path_parts[0] in CONFIG_ROOT_NAMES:
             purpose = 'config'
-        elif re.search(r'\b(example(s)?|sample(s)?|demo(s)?)\b', dir_name, re.IGNORECASE):
+        elif path_parts and path_parts[0] in SCRIPT_ROOT_NAMES:
+            purpose = 'scripts'
+        elif any(DOC_NAME_RE.match(part) for part in path_parts) and not has_source_anchor:
+            purpose = 'docs'
+        elif any(CONFIG_NAME_RE.match(part) for part in path_parts) and not has_source_anchor:
+            purpose = 'config'
+        elif any(SCRIPT_NAME_RE.match(part) for part in path_parts) and not has_source_anchor:
+            purpose = 'scripts'
+        elif any(EXAMPLE_NAME_RE.match(part) for part in path_parts):
             purpose = 'examples'
-        elif re.search(r'\b(asset(s)?|static|public|resource(s)?)\b', dir_name, re.IGNORECASE):
+        elif any(ASSET_NAME_RE.match(part) for part in path_parts):
             purpose = 'assets'
-        elif dir_name in DATA_DIR_PATTERNS:
-            purpose = 'unknown'  # Explicitly skip data/artifact dirs
+        elif has_source_anchor:
+            purpose = 'source'
         elif languages and any(lang in SOURCE_CODE_LANGUAGES for lang in languages):
             # Only classify as source if the dir contains actual code languages,
-            # not just json/yaml/markdown data files
+            # not just json/yaml/markdown data files.
             purpose = 'source'
 
         # Generate glob patterns
@@ -671,7 +691,7 @@ def write_project_config(analysis: ProjectAnalysis, output_path: Path) -> None:
     # Include source/test/doc directories and framework-specific build outputs.
     write_dirs = []
     for d in analysis.directories:
-        if d.purpose in ('source', 'test', 'docs', 'scripts'):
+        if d.purpose in ('source', 'tests', 'docs', 'scripts'):
             write_dirs.append(d.path)
     # Framework-specific build artifact directories
     fw_names = {fw.name for fw in analysis.frameworks if fw.confidence >= 0.5}

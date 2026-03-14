@@ -12,7 +12,7 @@ Portable `.claude/` template providing skills, hooks, and session management for
 
 ## Key Principles
 
-- **Your context is precious, subagent and team agent context is expendable** — Subagents read 50-100K tokens internally, report back <=1000 tokens each
+- **Your context is precious, subagent and team agent context is expendable** — Subagents read 50-100K tokens internally, report back <=700 tokens each
 - **Hooks are deterministic, instructions are advisory** — Security enforcement lives in hooks, not prompts
 - **Native permissions are the safety net, hooks add nuance** — settings.json deny/ask/allow catches basics; hooks handle complex logic like safe_delete_paths downgrades
 - **Status line is real-time telemetry** — Keep context/cost/workflow visibility concise and cheap to compute

@@ -15,16 +15,27 @@ Usage:
     state.log_verification('test', passed=True, details='18 tests passed')
     state.conclude()
 
-State Schema (v1.1):
+State Schema (v1.2):
     {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "primed_at": "ISO timestamp or null",
         "concluded_at": "ISO timestamp or null",
         "domains": ["source", "config", ...],
         "foundation_docs": ["README.md", ...],
+        "prime_summary": "Compact priming synthesis or null",
+        "analyst_summaries": [
+            {
+                "domain": "source",
+                "summary": "Core architecture centers on ...",
+                "files_read": 16,
+                "tokens_used": 59702
+            }
+        ],
         "execution_journal": [
             {"ts": "...", "type": "task_created", "subject": "...", "task_id": "..."},
             {"ts": "...", "type": "subagent_spawned", "role": "...", "model": "..."},
+            {"ts": "...", "type": "analyst_summary", "domain": "..."},
+            {"ts": "...", "type": "prime_summary_recorded"},
             {"ts": "...", "type": "team_created", "team_name": "...", "member_count": N, "members": [...]},
             {"ts": "...", "type": "team_closed", "team_name": "..."},
             {"ts": "...", "type": "adversary_verdict", "team_name": "...", "verdict": "...", "findings": "..."},
@@ -83,7 +94,7 @@ __all__ = [
 ]
 
 # Schema version for forward compatibility
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 
 def get_state_path(base_dir: Optional[Path] = None) -> Path:
@@ -140,11 +151,16 @@ class SessionState:
             try:
                 with open(self.state_path, 'r', encoding='utf-8') as f:
                     state = json.load(f)
-                # Migrate v1.0 -> v1.1: add teams array
-                if state.get('schema_version') == '1.0':
+                # Migrate older schemas forward lazily.
+                schema_version = state.get('schema_version')
+                if schema_version == '1.0':
                     state['teams'] = state.get('teams', [])
+                    schema_version = '1.1'
+                if schema_version in ('1.0', '1.1'):
+                    state['prime_summary'] = state.get('prime_summary')
+                    state['analyst_summaries'] = state.get('analyst_summaries', [])
                     state['schema_version'] = SCHEMA_VERSION
-                elif state.get('schema_version') != SCHEMA_VERSION:
+                elif schema_version != SCHEMA_VERSION:
                     print(f"Warning: State schema version mismatch", file=sys.stderr)
                 # Self-heal: ensure all required fields exist with correct types
                 defaults = self._default_state()
@@ -187,6 +203,8 @@ class SessionState:
             "concluded_at": None,
             "domains": [],
             "foundation_docs": [],
+            "prime_summary": None,
+            "analyst_summaries": [],
             "execution_journal": [],
             "subagents": [],
             "teams": [],
@@ -235,6 +253,8 @@ class SessionState:
         self.state["concluded_at"] = None  # Reset if re-priming
         self.state["domains"] = domains
         self.state["foundation_docs"] = foundation_docs or []
+        self.state["prime_summary"] = None
+        self.state["analyst_summaries"] = []
 
         # Clear previous execution data on new prime
         self.state["execution_journal"] = []
@@ -261,8 +281,8 @@ class SessionState:
         """Add entry to execution journal."""
         entry = {
             "ts": timestamp(),
-            "type": entry_type,
             **data,
+            "type": entry_type,
         }
         self.state["execution_journal"].append(entry)
 
@@ -309,7 +329,7 @@ class SessionState:
 
         self._log_journal("subagent_spawned", {
             "role": role,
-            "type": agent_type,
+            "agent_type": agent_type,
             "model": model,
         })
 
@@ -323,39 +343,145 @@ class SessionState:
         })
         return self._save()
 
+    def record_analyst_summary(
+        self,
+        domain: str,
+        summary: str,
+        files_read: Optional[int] = None,
+        tokens_used: Optional[int] = None,
+    ) -> bool:
+        """Persist a compact analyst summary for reuse by later skills."""
+        role = f"analyst-{domain}"
+        entry = {
+            "domain": domain,
+            "summary": summary,
+            "files_read": files_read,
+            "tokens_used": tokens_used,
+            "recorded_at": timestamp(),
+        }
+
+        # Prime analysts are long-lived enough to be useful in session state even
+        # if the skill records them at completion time rather than spawn time.
+        if not any(s.get("role") == role for s in self.state["subagents"]):
+            self.state["subagents"].append({
+                "role": role,
+                "type": "Explore",
+                "model": "unknown",
+                "description": f"Priming domain: {domain}",
+                "spawned_at": timestamp(),
+            })
+            self._log_journal("subagent_spawned", {
+                "role": role,
+                "agent_type": "Explore",
+                "model": "unknown",
+            })
+
+        updated = False
+        for idx, existing in enumerate(self.state["analyst_summaries"]):
+            if existing.get("domain") == domain:
+                self.state["analyst_summaries"][idx] = entry
+                updated = True
+                break
+        if not updated:
+            self.state["analyst_summaries"].append(entry)
+
+        self._log_journal("analyst_summary", {
+            "domain": domain,
+            "files_read": files_read,
+            "tokens_used": tokens_used,
+        })
+        self._log_journal("subagent_completed", {
+            "role": role,
+            "result_summary": summary,
+        })
+        return self._save()
+
+    def record_prime_summary(self, summary: str) -> bool:
+        """Persist the lead's compact priming synthesis for reuse."""
+        self.state["prime_summary"] = summary
+        self._log_journal("prime_summary_recorded", {})
+        return self._save()
+
     # ========== Team Methods ==========
 
-    def log_team_created(self, team_name: str, members: list[dict]) -> bool:
+    def _get_team(self, team_name: str) -> Optional[dict[str, Any]]:
+        """Return the tracked team entry for a name, if present."""
+        for team in self.state["teams"]:
+            if team["name"] == team_name:
+                return team
+        return None
+
+    def _ensure_team(self, team_name: str) -> tuple[dict[str, Any], bool]:
+        """Ensure a team entry exists and return it with a created flag."""
+        existing = self._get_team(team_name)
+        if existing is not None:
+            return existing, False
+
+        team_entry = {
+            "name": team_name,
+            "created_at": timestamp(),
+            "closed_at": None,
+            "members": [],
+            "adversary_verdict": None,
+            "adversary_findings": None,
+        }
+        self.state["teams"].append(team_entry)
+        return team_entry, True
+
+    def log_team_created(self, team_name: str, members: Optional[list[dict]] = None) -> bool:
         """Log team creation.
 
         Args:
             team_name: Name of the team (e.g. 'cc-exec-auth-refactor')
             members: List of dicts with keys: name, type, model
         """
-        team_entry = {
-            "name": team_name,
-            "created_at": timestamp(),
-            "closed_at": None,
-            "members": members,
-            "adversary_verdict": None,
-            "adversary_findings": None,
-        }
-        self.state["teams"].append(team_entry)
+        team_entry, created = self._ensure_team(team_name)
+        incoming_members = members or []
+        existing_names = {member.get("name") for member in team_entry["members"]}
+        for member in incoming_members:
+            name = member.get("name")
+            if name and name not in existing_names:
+                team_entry["members"].append(member)
+                existing_names.add(name)
 
-        self._log_journal("team_created", {
-            "team_name": team_name,
-            "member_count": len(members),
-            "members": members,
-        })
+        if created:
+            self._log_journal("team_created", {
+                "team_name": team_name,
+                "member_count": len(team_entry["members"]),
+                "members": list(team_entry["members"]),
+            })
+
+        return self._save()
+
+    def add_team_member(self, team_name: str, name: str, agent_type: str, model: str) -> bool:
+        """Register a team member if not already present."""
+        team_entry, created = self._ensure_team(team_name)
+        if created:
+            self._log_journal("team_created", {
+                "team_name": team_name,
+                "member_count": 0,
+                "members": [],
+            })
+
+        if not any(member.get("name") == name for member in team_entry["members"]):
+            team_entry["members"].append({
+                "name": name,
+                "type": agent_type,
+                "model": model,
+            })
 
         return self._save()
 
     def log_team_closed(self, team_name: str) -> bool:
         """Log team shutdown. Sets closed_at on matching team."""
-        for team in self.state["teams"]:
-            if team["name"] == team_name:
-                team["closed_at"] = timestamp()
-                break
+        team, created = self._ensure_team(team_name)
+        if created:
+            self._log_journal("team_created", {
+                "team_name": team_name,
+                "member_count": 0,
+                "members": [],
+            })
+        team["closed_at"] = timestamp()
 
         self._log_journal("team_closed", {
             "team_name": team_name,
@@ -371,11 +497,15 @@ class SessionState:
             verdict: 'ACCEPTED' or 'CHALLENGED'
             findings: Summary string of adversary findings
         """
-        for team in self.state["teams"]:
-            if team["name"] == team_name:
-                team["adversary_verdict"] = verdict
-                team["adversary_findings"] = findings
-                break
+        team, created = self._ensure_team(team_name)
+        if created:
+            self._log_journal("team_created", {
+                "team_name": team_name,
+                "member_count": 0,
+                "members": [],
+            })
+        team["adversary_verdict"] = verdict
+        team["adversary_findings"] = findings
 
         self._log_journal("adversary_verdict", {
             "team_name": team_name,
@@ -461,6 +591,8 @@ class SessionState:
             "tasks_completed": tasks_completed,
             "subagents_spawned": len(subagents),
             "subagent_counts": subagent_counts,
+            "prime_summary_available": bool(self.state.get("prime_summary")),
+            "analyst_summaries_recorded": len(self.state.get("analyst_summaries", [])),
             "teams_created": len(teams),
             "teams": [
                 {
@@ -557,7 +689,9 @@ def main():
     log_parser = subparsers.add_parser('log', help='Log an event')
     log_parser.add_argument('--type', required=True,
                            choices=['task_created', 'task_started', 'task_completed',
-                                   'subagent', 'verification', 'file_modified',
+                                   'subagent', 'subagent_completed',
+                                   'analyst_summary', 'prime_summary',
+                                   'verification', 'file_modified',
                                    'session_ended', 'session_checkpoint',
                                    'team_created', 'team_closed', 'adversary_verdict'])
     log_parser.add_argument('--subject', help='Task subject')
@@ -580,6 +714,9 @@ def main():
     log_parser.add_argument('--verdict', choices=['ACCEPTED', 'CHALLENGED'],
                            help='Adversary verdict (for adversary_verdict)')
     log_parser.add_argument('--findings', help='Adversary findings summary (for adversary_verdict)')
+    log_parser.add_argument('--domain', help='Domain name (for analyst_summary)')
+    log_parser.add_argument('--files-read', type=int, help='Files read count (for analyst_summary)')
+    log_parser.add_argument('--tokens-used', type=int, help='Approximate tokens used (for analyst_summary)')
 
     # conclude command
     subparsers.add_parser('conclude', help='Conclude session and archive')
@@ -619,6 +756,29 @@ def main():
                 print("Error: --role is required for subagent", file=sys.stderr)
                 sys.exit(1)
             state.log_subagent(args.role, args.agent_type, args.model or 'sonnet', args.details or '')
+        elif args.type == 'subagent_completed':
+            if not args.role:
+                print("Error: --role is required for subagent_completed", file=sys.stderr)
+                sys.exit(1)
+            state.log_subagent_completed(args.role, args.details)
+        elif args.type == 'analyst_summary':
+            if not args.domain:
+                print("Error: --domain is required for analyst_summary", file=sys.stderr)
+                sys.exit(1)
+            if not args.details:
+                print("Error: --details is required for analyst_summary", file=sys.stderr)
+                sys.exit(1)
+            state.record_analyst_summary(
+                args.domain,
+                args.details,
+                files_read=args.files_read,
+                tokens_used=args.tokens_used,
+            )
+        elif args.type == 'prime_summary':
+            if not args.details:
+                print("Error: --details is required for prime_summary", file=sys.stderr)
+                sys.exit(1)
+            state.record_prime_summary(args.details)
         elif args.type == 'verification':
             state.log_verification(args.verification_type, args.passed, args.details)
         elif args.type == 'file_modified':

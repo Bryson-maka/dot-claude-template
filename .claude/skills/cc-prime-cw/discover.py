@@ -106,6 +106,10 @@ BINARY_EXTENSIONS = {
     '.bin', '.dat',
 }
 
+IGNORED_FILENAMES = {
+    '.DS_Store',
+}
+
 
 def get_line_count(file_path: Path) -> int:
     """Count lines in a file, handling encoding errors gracefully."""
@@ -168,6 +172,8 @@ def _is_ignored_path(file_path: Path, base_dir: Path) -> bool:
 
     # Check for binary extensions
     if file_path.suffix.lower() in BINARY_EXTENSIONS:
+        return True
+    if file_path.name in IGNORED_FILENAMES:
         return True
 
     return False
@@ -269,12 +275,17 @@ def process_domain(
                 'chunks': chunks
             })
 
-    # Sort files by importance: entry points first (main, index, app, __init__), then by lines desc
+    # Sort files by importance with low-signal package markers and archive docs
+    # pushed later so the capped domain list keeps more useful files.
     def file_importance(f):
         path = f['path'].lower()
         name = path.split('/')[-1]
-        # Priority 1: Entry points
-        if any(entry in name for entry in ['main.', 'index.', 'app.', '__init__']):
+        if '/archive/' in path or '/archives/' in path or path.startswith('.claude/handoff/archive/'):
+            return (4, -f['lines'], path)
+        if name == '__init__.py':
+            return (3, f['lines'], path)
+        # Priority 1: real entry points
+        if any(name.startswith(entry) for entry in ['main.', 'index.', 'app.', 'cli.', 'server.']):
             return (0, -f['lines'], path)
         # Priority 2: Config/setup files
         if any(cfg in name for cfg in ['config', 'setup', 'settings']):
@@ -381,14 +392,26 @@ def load_project_config(base_dir: Path) -> dict[str, Any]:
 
 
 def parse_handoff_constraints(base_dir: Path) -> dict[str, Any]:
-    """Extract open items and guardrails from active handoff document."""
+    """Extract open items, guardrails, priorities, plan doc, and verification from active handoff."""
     handoff_path = base_dir / '.claude' / 'handoff' / 'active.md'
     if not handoff_path.exists():
         return {"has_handoff": False}
 
     try:
         content = handoff_path.read_text(encoding='utf-8')
-        result: dict[str, Any] = {"has_handoff": True, "open_items": [], "guardrails": []}
+        result: dict[str, Any] = {
+            "has_handoff": True,
+            "open_items": [],
+            "guardrails": [],
+            "priorities": [],
+            "verification": [],
+        }
+
+        # Extract plan_doc from header
+        for line in content.split('\n'):
+            if line.startswith('**Plan doc**:'):
+                result['plan_doc'] = line.split(':', 1)[1].strip()
+                break
 
         # Extract sections by heading
         current_section: str | None = None
@@ -399,12 +422,31 @@ def parse_handoff_constraints(base_dir: Path) -> dict[str, Any]:
             elif line.startswith('## Guardrails') or line.startswith('## Guard'):
                 current_section = 'guardrails'
                 continue
+            elif line.startswith('## Next Session') or line.startswith('## Priorities'):
+                current_section = 'priorities'
+                continue
+            elif line.startswith('### Verification'):
+                current_section = 'verification'
+                continue
+            elif line.startswith('### Guardrails'):
+                current_section = 'guardrails'
+                continue
+            elif line.startswith('### Priorities'):
+                current_section = 'priorities'
+                continue
             elif line.startswith('## '):
                 current_section = None
                 continue
+            elif line.startswith('### ') and current_section in ('priorities', 'verification', 'guardrails'):
+                # Sub-sections within Next Session — only switch for known sub-headings
+                if not any(line.startswith(f'### {h}') for h in ('Verification', 'Guardrails', 'Priorities', 'Blocking', 'Deferred')):
+                    continue
 
             if current_section and line.strip().startswith('- '):
                 result[current_section].append(line.strip()[2:].strip())
+            elif current_section == 'priorities' and line.strip() and line.strip()[0].isdigit() and '. ' in line:
+                # Numbered priorities (e.g., "1. Execute M1...")
+                result['priorities'].append(line.strip().split('. ', 1)[1].strip())
 
         return result
     except IOError:
@@ -719,6 +761,37 @@ def generate_manifest(
 
     # Handoff constraints from prior session
     manifest['handoff_constraints'] = parse_handoff_constraints(base_dir)
+
+    # Add active.md and plan_doc to foundation if handoff exists
+    if manifest['handoff_constraints'].get('has_handoff'):
+        handoff_path_str = '.claude/handoff/active.md'
+        handoff_in_foundation = any(
+            f['path'] == handoff_path_str for f in manifest['foundation']
+        )
+        if not handoff_in_foundation:
+            full_handoff = base_dir / handoff_path_str
+            if full_handoff.exists():
+                lines = get_line_count(full_handoff)
+                manifest['foundation'].append({
+                    'path': handoff_path_str,
+                    'lines': lines,
+                    'size_class': classify_size(lines),
+                })
+
+    plan_doc = manifest.get('handoff_constraints', {}).get('plan_doc')
+    if plan_doc:
+        plan_in_foundation = any(
+            f['path'] == plan_doc for f in manifest['foundation']
+        )
+        if not plan_in_foundation:
+            plan_path = base_dir / plan_doc
+            if plan_path.exists():
+                lines = get_line_count(plan_path)
+                manifest['foundation'].append({
+                    'path': plan_doc,
+                    'lines': lines,
+                    'size_class': classify_size(lines),
+                })
 
     # P2: Compact git summary (top 5 volatile files, top 3 coupled pairs)
     manifest['git_summary'] = generate_git_summary(base_dir)

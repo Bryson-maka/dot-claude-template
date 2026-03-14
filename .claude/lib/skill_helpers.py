@@ -56,19 +56,24 @@ def get_session_context(base_dir: Path) -> Optional[dict]:
 
     Returns dict with: primed, domains, foundation_docs, manifest_path,
     state_path, execution_journal, subagents_spawned, verifications,
-    files_modified_by_session.
+    files_modified_by_session, prime_summary, analyst_summaries,
+    topology, handoff_constraints.
     Returns None if no session data exists.
     """
     context = {
         'primed': False,
         'domains': [],
         'foundation_docs': [],
+        'prime_summary': None,
+        'analyst_summaries': [],
         'manifest_path': None,
         'state_path': None,
         'execution_journal': [],
         'subagents_spawned': 0,
         'verifications': [],
         'files_modified_by_session': [],
+        'topology': None,
+        'handoff_constraints': None,
     }
 
     has_data = False
@@ -81,6 +86,8 @@ def get_session_context(base_dir: Path) -> Optional[dict]:
             context['primed'] = state.get('primed_at') is not None
             context['domains'] = state.get('domains', [])
             context['foundation_docs'] = state.get('foundation_docs', [])
+            context['prime_summary'] = state.get('prime_summary')
+            context['analyst_summaries'] = state.get('analyst_summaries', [])
             context['state_path'] = str(state_path)
             context['execution_journal'] = state.get('execution_journal', [])
             context['subagents_spawned'] = len(state.get('subagents', []))
@@ -102,6 +109,17 @@ def get_session_context(base_dir: Path) -> Optional[dict]:
                 context['foundation_docs'] = [
                     f['path'] for f in manifest.get('foundation', [])
                 ]
+                context['topology'] = manifest.get('topology')
+                context['handoff_constraints'] = manifest.get('handoff_constraints')
+                has_data = True
+            except (json.JSONDecodeError, IOError):
+                pass
+        else:
+            try:
+                with open(manifest_path, 'r', encoding='utf-8') as f:
+                    manifest = json.load(f)
+                context['topology'] = manifest.get('topology')
+                context['handoff_constraints'] = manifest.get('handoff_constraints')
                 has_data = True
             except (json.JSONDecodeError, IOError):
                 pass

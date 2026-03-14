@@ -12,14 +12,14 @@ Wrap up your Claude Code session with a summary, README check, and git commit.
 
 ## Current State
 
-!`uv run --with pyyaml python3 .claude/skills/cc-conclude/analyze_changes.py 2>/dev/null || echo '{"error": "Analysis failed - check git status manually"}'`
+!`uv run --with pyyaml python3 .claude/skills/cc-conclude/analyze_changes.py`
 
 The output above includes:
 - **git_state**: Branch, remote tracking, staged/unstaged/untracked counts
 - **changes**: List of modified files with status and line counts
 - **triggers**: README update triggers detected
 - **recommendations**: Prioritized git commands to run (stage, commit, push)
-- **session**: Context from `/cc-prime-cw` if run earlier (domains analyzed, foundation docs)
+- **session**: Context from `/cc-prime-cw` and `/cc-execute` if run earlier (domains analyzed, compact priming summary, analyst summaries, teams, verification state)
 - **handoff**: Session handoff state (`active_exists`, `active_title`, `active_date`, `archive_count`)
 
 ---
@@ -57,6 +57,8 @@ The analysis output above includes session context from `.claude/session/state.j
 - `session.verifications`: Test/lint/adversarial results
 - `session.files_modified_by_session`: Files modified during execution
 - `session.subagents_spawned`: Count of direct subagents (cc-prime-cw analysts)
+- `session.prime_summary`: Compact priming synthesis from `/cc-prime-cw`
+- `session.analyst_summaries`: Per-domain summaries persisted during priming
 
 **To view detailed session state**:
 ```bash
@@ -66,12 +68,15 @@ python3 .claude/lib/session_state.py summary
 
 Generate session summary using this data:
 - **Status**: COMPLETED, IN_PROGRESS, or BLOCKED
+- **Priming Context**: Use `session.prime_summary` and `session.analyst_summaries` to recall the active architecture and plan context
 - **Tasks**: From execution_journal task_completed entries
-- **Teams**: From teams list and composition; include legacy subagent counts if present
+- **Teams**: From hook-captured teams list and composition; include legacy subagent counts if present
 - **Adversarial Challenges**: If `session.adversary_verdicts` has entries, include verdict (ACCEPTED/CHALLENGED) and key findings for each
 - **Verification**: Test results and adversarial challenge outcomes
 - **Files Changed**: From git diff + files_modified list
 - **Open Items**: Incomplete work or follow-ups
+
+Do not reconstruct the session by rereading broad swaths of the repo. Prefer the saved session context, git diff, and handoff state. If a hook-populated field is sparse or missing, note that gap instead of replaying `/cc-prime-cw` or `/cc-execute`.
 
 ### Phase 3: README Check (unless --no-readme or --commit)
 
@@ -97,69 +102,50 @@ If `handoff.active_exists` is true in the analysis output:
 
 Write `.claude/handoff/active.md` using this template. Fill each section from git diff, session state, and your understanding of what happened this session. The title should reflect what was ACCOMPLISHED, not what was originally planned.
 
+- If the session worked from a plan document (e.g., a design doc referenced in the previous handoff), include it as `**Plan doc**: {path}`. This ensures the next session's cc-prime-cw discovers and loads it.
+- Team composition and adversarial challenge details belong in the archive, not the active handoff. Fold the adversary verdict into Accomplished as a single bullet.
+- Keep Accomplished to 3-5 concrete outcome bullets. The handoff is for the NEXT session, not a retrospective.
+- Reuse the persisted prime summary when it helps explain scope or active plan context; do not restate large architecture docs.
+- Open Items should distinguish blocking issues from deferred/carried-forward items.
+
 ```markdown
 # {Title — what was accomplished this session}
 
 **Date**: {YYYY-MM-DD}
 **Status**: {one-line status}
-**Prior session**: `.claude/handoff/archive/{previous archived filename}` (if any)
+**Plan doc**: {path to plan if exists, otherwise omit this line}
+**Prior session**: `.claude/handoff/archive/{previous archived filename}`
 
 ---
 
 ## Accomplished
 
-- {Bullet list of concrete things completed}
-
-## Discovered
-
-- {Insights, patterns, or findings from this session}
-- {Only include if something was actually discovered}
-
-## Team Composition
-
-{Include this section only if session.teams has entries, otherwise omit entirely}
-
-| Agent | Type | Model | Responsibility |
-|-------|------|-------|---------------|
-| {name} | {type} | {model} | {inferred from agent name/role} |
-
-{List agents from each team in session.teams[].members}
-
-## Adversarial Challenge
-
-{Include this section only if session.adversary_verdicts has entries, otherwise omit entirely}
-
-For each team with an adversary verdict:
-
-**Team**: {team name}
-**Verdict**: {ACCEPTED or CHALLENGED}
-**Findings**: {summary from adversary_findings}
-**Resolution**: {how challenged items were addressed, if applicable}
+- {3-5 bullets max — concrete outcomes only, not process}
+- {Include adversary verdict as one bullet if applicable: "Adversary: ACCEPTED (N holes fixed)"}
 
 ## Open Items
 
-- {Unfinished work, known issues, or things that need follow-up}
+### Blocking
+- {Must fix before next work can proceed}
 
-## Priorities for Next Session
+### Deferred
+- {Carried forward — include origin date if older than 2 sessions}
 
-1. {Most important next step}
+## Next Session
+
+### Priorities
+1. {Most important — the specific task to execute}
 2. {Second priority}
-3. {Third priority if applicable}
+3. {Third if applicable}
 
-## Testing Protocol
+### Verification
+```bash
+# Commands to verify current state
+```
 
-- {How to verify what was built — live commands, not unit tests}
-
-## Guardrails
-
-- {Things the next session should NOT do}
-- {Common mistakes to avoid}
-
-## Key Files Modified
-
-| File | Changes |
-|------|---------|
-| `path/to/file` | Brief description of changes |
+### Guardrails
+- {What NOT to do — keep these sharp and current}
+- {Remove stale guardrails that no longer apply}
 ```
 
 **Step 4c — Review MEMORY.md:**
@@ -196,3 +182,11 @@ Check if any stable patterns were confirmed this session that should be added to
 - Shows exactly what will be committed
 - Allows message editing before commit
 
+## Scope Boundaries
+
+cc-conclude is a **session wrap-up tool**, not an execution tool:
+- Do NOT edit source code, tests, or application files — that is cc-execute's job
+- Do NOT spawn agent teams for implementation work or for reconstructing session context
+- Do NOT start new features, fix bugs, or refactor code
+- The ONLY files cc-conclude should write/edit are: `.claude/handoff/active.md` and `README.md` (if triggers detected)
+- If unfinished work remains, document it in the handoff's Open Items — do not attempt to complete it
